@@ -141,3 +141,6 @@ test_app/
 myenv/
 myenv3_8/
 .venv/
+htmlcov/
+.coverage
+bandit_report.txt

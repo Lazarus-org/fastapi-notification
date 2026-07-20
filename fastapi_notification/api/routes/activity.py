@@ -5,8 +5,9 @@ from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_notification.api.dependencies.auth import (
-    get_authenticated_user,
+    get_current_user,
     make_admin_dependency,
+    make_authenticated_dependency,
 )
 from fastapi_notification.api.dependencies.db import get_session
 from fastapi_notification.api.filters.notification_filter import NotificationFilter
@@ -101,7 +102,9 @@ def create_activity_router(
     run_checks()
 
     session_dep = session_dependency or get_session
-    user_dep = current_user_dependency or get_authenticated_user
+    user_dep = make_authenticated_dependency(
+        current_user_dependency or get_current_user
+    )
     routes = ActivityRoutes(user_dependency=user_dep)
     admin_dep = make_admin_dependency(user_dep)
 
@@ -119,7 +122,7 @@ def create_activity_router(
             session: AsyncSession = Depends(session_dep),
             user: Any = Depends(user_dep),
             filterset: NotificationFilter = Depends(routes.get_filter_dependency()),
-        ) -> Dict[str, Any]:
+        ) -> Any:
             """List the notifications the current user has already seen.
 
             Args:
@@ -195,7 +198,7 @@ def create_activity_router(
 
     if routes.is_method_enabled("RETRIEVE"):
 
-        @router.get("/{notification_id}/", summary="Retrieve a seen notification")
+        @router.get("/{notification_id:int}/", summary="Retrieve a seen notification")
         async def retrieve_activity(  # type: ignore[misc]
             notification_id: int,
             session: AsyncSession = Depends(session_dep),
@@ -235,7 +238,7 @@ def create_activity_router(
     if config.include_soft_delete:
 
         @router.get(
-            "/{notification_id}/clear_notification/",
+            "/{notification_id:int}/clear_notification/",
             status_code=status.HTTP_204_NO_CONTENT,
             summary="Soft delete a notification",
         )
@@ -275,7 +278,7 @@ def create_activity_router(
     if config.include_hard_delete:
 
         @router.get(
-            "/{notification_id}/delete_notification/",
+            "/{notification_id:int}/delete_notification/",
             status_code=status.HTTP_204_NO_CONTENT,
             summary="Permanently delete a notification",
         )

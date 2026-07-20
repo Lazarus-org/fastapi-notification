@@ -6,6 +6,7 @@ from fastapi_notification.api.schemas.helper.get_serializer_cls import (
     group_serializer_class,
     user_serializer_class,
 )
+from fastapi_notification.utils.loading import loaded_collection
 
 
 class NotificationSerializer(BaseSerializer):
@@ -64,8 +65,12 @@ class NotificationSerializer(BaseSerializer):
         payload = {
             "id": instance.id,
             "title": str(instance),
-            "recipient": user_serializer.to_representation_many(instance.recipient),
-            "group": group_serializer.to_representation_many(instance.group),
+            "recipient": user_serializer.to_representation_many(
+                loaded_collection(instance, "recipient")
+            ),
+            "group": group_serializer.to_representation_many(
+                loaded_collection(instance, "group")
+            ),
             "verb": instance.verb,
             "status": instance.status,
             "actor_content_type": _content_type_label(instance.actor_content_type),
@@ -75,7 +80,9 @@ class NotificationSerializer(BaseSerializer):
             ),
             "link": instance.link,
             "is_sent": instance.is_sent,
-            "seen_by": user_serializer.to_representation_many(instance.seen_by),
+            "seen_by": user_serializer.to_representation_many(
+                loaded_collection(instance, "seen_by")
+            ),
             "public": instance.public,
             "data": instance.data,
             "timestamp": instance.timestamp,

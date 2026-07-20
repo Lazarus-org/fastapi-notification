@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from fastapi_notification.api.schemas.base import BaseSerializer
+from fastapi_notification.utils.loading import loaded_collection
 
 
 class PermissionSerializer(BaseSerializer):
@@ -43,12 +44,12 @@ class GroupSerializer(BaseSerializer):
             Dict[str, Any]: The serialized group.
 
         """
-        data = super().to_representation(instance)
+        payload = {
+            "id": getattr(instance, "id", None),
+            "name": getattr(instance, "name", None),
+            "permissions": PermissionSerializer.to_representation_many(
+                loaded_collection(instance, "permissions")
+            ),
+        }
 
-        permissions = getattr(instance, "permissions", None)
-        if permissions is not None:
-            data["permissions"] = PermissionSerializer.to_representation_many(
-                permissions
-            )
-
-        return data
+        return super().to_representation(payload)

@@ -208,6 +208,9 @@ norecursedirs = [
 
 [tool.coverage.run]
 source = [ "fastapi_notification" ]
+# SQLAlchemy runs async database calls inside greenlets; without this, coverage
+# loses the trace at every switch and under-reports the lines after an await.
+concurrency = [ "thread", "greenlet" ]
 omit = [
   "*/tests/*",
   "*/migrations/*",

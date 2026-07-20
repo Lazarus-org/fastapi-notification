@@ -4,7 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi_notification.api.dependencies.auth import get_authenticated_user
+from fastapi_notification.api.dependencies.auth import (
+    get_current_user,
+    make_authenticated_dependency,
+)
 from fastapi_notification.api.dependencies.db import get_session
 from fastapi_notification.api.filters.notification_filter import NotificationFilter
 from fastapi_notification.api.routes.base import BaseNotificationRoutes
@@ -101,7 +104,9 @@ def create_notification_router(
     run_checks()
 
     session_dep = session_dependency or get_session
-    user_dep = current_user_dependency or get_authenticated_user
+    user_dep = make_authenticated_dependency(
+        current_user_dependency or get_current_user
+    )
     routes = NotificationRoutes(user_dependency=user_dep)
 
     router = APIRouter(
@@ -118,7 +123,7 @@ def create_notification_router(
             session: AsyncSession = Depends(session_dep),
             user: Any = Depends(user_dep),
             filterset: NotificationFilter = Depends(routes.get_filter_dependency()),
-        ) -> Dict[str, Any]:
+        ) -> Any:
             """List the notifications the current user has not seen yet.
 
             Args:
@@ -155,7 +160,7 @@ def create_notification_router(
 
     if routes.is_method_enabled("RETRIEVE"):
 
-        @router.get("/{notification_id}/", summary="Retrieve a notification")
+        @router.get("/{notification_id:int}/", summary="Retrieve a notification")
         async def retrieve_notification(  # type: ignore[misc]
             notification_id: int,
             session: AsyncSession = Depends(session_dep),

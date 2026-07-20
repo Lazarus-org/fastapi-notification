@@ -82,6 +82,7 @@ class NotificationSeen(Base):
             PermissionError: If the user is not allowed to see the notification.
 
         """
+        await ensure_loaded(session, notification, "recipient", "group")
         await ensure_loaded(session, user, "groups")
         NotificationPermission(notification).validate_permission(user, "mark as seen")
 

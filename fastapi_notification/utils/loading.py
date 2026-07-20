@@ -4,6 +4,32 @@ from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+def loaded_collection(instance: Any, name: str) -> Any:
+    """Return a relationship's contents, or an empty list if it is not loaded.
+
+    Serializers must never trigger a lazy load: under the async ORM that raises
+    rather than emitting a query. Reading through this helper keeps rendering
+    safe for instances whose relationships were not eagerly loaded.
+
+    Args:
+        instance (Any): The model instance to read from.
+        name (str): The relationship name.
+
+    Returns:
+        Any: The loaded contents, or an empty list.
+
+    """
+    if instance is None:
+        return []
+
+    state = inspect(instance, raiseerr=False)
+
+    if state is not None and name in state.unloaded:
+        return []
+
+    return getattr(instance, name, []) or []
+
+
 async def ensure_loaded(session: AsyncSession, instance: Any, *attributes: str) -> Any:
     """Load the named relationships on an instance if they are not loaded yet.
 

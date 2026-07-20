@@ -252,6 +252,14 @@ class Notification(Base):
             populated.
 
         """
+        await ensure_loaded(
+            session,
+            self,
+            "actor_content_type",
+            "target_content_type",
+            "action_object_content_type",
+        )
+
         pairs = (
             ("actor", self.actor_content_type, self.actor_object_id),
             ("target", self.target_content_type, self.target_object_id),
@@ -285,6 +293,7 @@ class Notification(Base):
                 notification as seen.
 
         """
+        await ensure_loaded(session, self, "recipient", "group", "seen_by")
         await ensure_loaded(session, user, "groups")
         NotificationPermission(self).validate_permission(user, "mark as seen")
 

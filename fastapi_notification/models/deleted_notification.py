@@ -83,6 +83,7 @@ class DeletedNotification(Base):
                 notification.
 
         """
+        await ensure_loaded(session, notification, "recipient", "group")
         await ensure_loaded(session, user, "groups")
         NotificationPermission(notification).validate_permission(user, "delete")
 
