@@ -64,7 +64,7 @@ pre-commit = "^3.5.0"
 bandit = { extras = [ "toml" ], version = "^1.7.9" }
 tox = "^4.16.0"
 sphinx = "^6.2.1"
-sphinx-rtd-theme = "^2.0.0"
+sphinx-rtd-theme = ">=2,<4"
 docformatter = "^1.7.5"
 codecov = "^2.1.13"
 python-semantic-release = "^9.8.8"
