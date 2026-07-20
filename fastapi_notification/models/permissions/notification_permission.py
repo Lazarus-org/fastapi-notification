@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from fastapi_notification.utils.user_model import get_username
+from fastapi_notification.utils.username import get_username
 
 
 class NotificationPermission:

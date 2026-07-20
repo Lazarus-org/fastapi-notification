@@ -10,7 +10,7 @@ from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
 from fastapi_notification.utils.loading import ensure_loaded
-from fastapi_notification.utils.user_model import get_username
+from fastapi_notification.utils.username import get_username
 
 
 class NotificationSeen(Base):

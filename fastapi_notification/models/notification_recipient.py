@@ -2,7 +2,7 @@ from sqlalchemy import ForeignKey, Index, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fastapi_notification.models.base import Base
-from fastapi_notification.utils.user_model import get_username
+from fastapi_notification.utils.username import get_username
 
 
 class NotificationRecipient(Base):
