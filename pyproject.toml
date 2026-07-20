@@ -67,7 +67,7 @@ sphinx = "^6.2.1"
 sphinx-rtd-theme = "^2.0.0"
 docformatter = "^1.7.5"
 codecov = "^2.1.13"
-python-semantic-release = "^9.8.8"
+python-semantic-release = ">=9.8.8,<11.0.0"
 
 [tool.black]
 line-length = 88
