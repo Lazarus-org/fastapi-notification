@@ -58,7 +58,7 @@ alembic = "^1.13.2"
 pylint = "^3.2.6"
 mypy = "^1.11.1"
 isort = "^5.13.2"
-black = "^24.4.2"
+black = ">=24.4.2,<26.0.0"
 commitizen = "^3.28.0"
 pre-commit = "^3.5.0"
 bandit = { extras = [ "toml" ], version = "^1.7.9" }
