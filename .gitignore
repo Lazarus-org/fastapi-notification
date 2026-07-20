@@ -144,3 +144,4 @@ myenv3_8/
 htmlcov/
 .coverage
 bandit_report.txt
+docs/_build/

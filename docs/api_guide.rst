@@ -1,0 +1,329 @@
+API Guide
+=========
+
+The package exposes two groups of endpoints. **Notifications** are the things
+you have not seen yet; **Activities** are the history of everything you have.
+Reading a notification moves it from the first group to the second.
+
+Both groups are mounted by ``create_router()``:
+
+.. code-block:: python
+
+   from fastapi_notification import create_router
+
+   app.include_router(
+       create_router(
+           session_dependency=get_session,
+           current_user_dependency=get_current_user,
+       )
+   )
+
+Each group can also be mounted on its own, with its own prefix:
+
+.. code-block:: python
+
+   from fastapi_notification import create_activity_router, create_notification_router
+
+   app.include_router(create_notification_router(prefix="/inbox"))
+   app.include_router(create_activity_router(prefix="/history"))
+
+
+Conditional Routes
+------------------
+
+Routes are registered only when their setting allows it. A route you switch off
+is not registered at all: it returns ``404``, and it does not appear in the
+OpenAPI schema or on the ``/docs`` page. Nothing is registered merely to reject
+every request.
+
+============================================  ==========================================
+Setting                                       Routes it controls
+============================================  ==========================================
+``FASTAPI_NOTIFICATION_API_ALLOW_LIST``       Both listing routes
+``FASTAPI_NOTIFICATION_API_ALLOW_RETRIEVE``   Both retrieval routes
+``FASTAPI_NOTIFICATION_API_INCLUDE_SOFT_DELETE``  Both clearing routes
+``FASTAPI_NOTIFICATION_API_INCLUDE_HARD_DELETE``  Both permanent-deletion routes
+============================================  ==========================================
+
+Because settings are read when the router is built, call ``configure()`` before
+including the router.
+
+
+Notifications API
+-----------------
+
+======  ====================================  ============================================
+Method  Path                                  Description
+======  ====================================  ============================================
+GET     ``/notifications/``                   List the notifications you have not seen.
+GET     ``/notifications/mark_all_as_seen/``  Mark every unseen notification as seen.
+GET     ``/notifications/{notification_id}/`` Retrieve one notification, marking it seen.
+======  ====================================  ============================================
+
+Retrieving a notification marks it as seen as a side effect, so the same
+notification will not appear in the next listing. Marking a notification as
+seen twice is harmless.
+
+
+Activities API
+--------------
+
+======  ===============================================  =========================================
+Method  Path                                             Description
+======  ===============================================  =========================================
+GET     ``/activities/``                                 List the notifications you have seen.
+GET     ``/activities/clear_activities/``                Soft-delete every activity.
+GET     ``/activities/delete_activities/``               Permanently delete every activity.
+GET     ``/activities/{notification_id}/``               Retrieve one activity.
+GET     ``/activities/{notification_id}/clear_notification/``   Soft-delete one activity.
+GET     ``/activities/{notification_id}/delete_notification/``  Permanently delete one activity.
+======  ===============================================  =========================================
+
+Soft deletion records that *this* user cleared the notification. The row stays
+in the database and stays visible to its other recipients. Permanent deletion
+destroys the row for everyone, which is why it is restricted to staff and
+switched off by default.
+
+
+Example Responses
+-----------------
+
+List notifications with full details
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Staff users, and everyone when ``SERIALIZER_INCLUDE_FULL_DETAILS`` is on,
+receive the detailed representation:
+
+.. code-block:: bash
+
+   $ curl -H "Authorization: Bearer <token>" http://localhost:8000/notifications/
+
+.. code-block:: json
+
+   {
+     "count": 1,
+     "next": null,
+     "previous": null,
+     "results": [
+       {
+         "id": 1,
+         "title": "alice liked your post my-first-post 2 minutes ago",
+         "recipient": [
+           {
+             "username": "bob",
+             "email": "bob@example.com"
+           }
+         ],
+         "group": [
+           {
+             "id": 1,
+             "name": "moderators",
+             "permissions": []
+           }
+         ],
+         "verb": "liked your post",
+         "status": "INFO",
+         "actor_content_type": "auth.user",
+         "target_content_type": "myapp.post",
+         "action_object_content_type": null,
+         "link": "https://example.com/posts/123",
+         "is_sent": true,
+         "seen_by": [],
+         "public": true,
+         "data": {"post_id": 123},
+         "timestamp": "2026-07-20T12:00:00Z"
+       }
+     ]
+   }
+
+List notifications with the default summary fields
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Ordinary users receive a compact representation, which is read from the
+database with a narrower query:
+
+.. code-block:: json
+
+   {
+     "count": 1,
+     "next": null,
+     "previous": null,
+     "results": [
+       {
+         "title": "alice liked your post my-first-post 2 minutes ago",
+         "id": 1,
+         "description": "alice liked your post my-first-post",
+         "status": "INFO",
+         "link": "https://example.com/posts/123",
+         "timestamp": "2026-07-20T12:00:00Z"
+       }
+     ]
+   }
+
+Setting ``SERIALIZER_FIELDS`` replaces this list with exactly the fields you
+name.
+
+Mark all as seen
+~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   $ curl -H "Authorization: Bearer <token>" \
+       http://localhost:8000/notifications/mark_all_as_seen/
+
+.. code-block:: json
+
+   {"detail": "3 Notifications marked as seen."}
+
+Clear and delete
+~~~~~~~~~~~~~~~~
+
+The four clearing and deletion routes return ``204 No Content`` with an empty
+body:
+
+.. code-block:: bash
+
+   $ curl -i -H "Authorization: Bearer <token>" \
+       http://localhost:8000/activities/1/clear_notification/
+
+.. code-block:: text
+
+   HTTP/1.1 204 No Content
+
+Not found
+~~~~~~~~~
+
+Asking for a notification that does not exist, or that you are not allowed to
+see, gives the same answer either way, so the API never reveals that a
+notification exists:
+
+.. code-block:: json
+
+   {"detail": "Not found."}
+
+
+Pagination
+----------
+
+Listings are wrapped in an envelope carrying the total count and links to the
+neighbouring pages:
+
+.. code-block:: json
+
+   {
+     "count": 42,
+     "next": "http://localhost:8000/notifications/?limit=10&offset=10",
+     "previous": null,
+     "results": []
+   }
+
+============  ==========================================================
+Parameter     Behaviour
+============  ==========================================================
+``limit``     Page size. Defaults to 10, minimum 1, maximum 100.
+``offset``    How many items to skip. Defaults to 0.
+============  ==========================================================
+
+A limit above the maximum is capped rather than rejected, and a limit that is
+missing, negative or not a number falls back to the default. Page links
+preserve your other query parameters, so filtering and ordering survive a move
+between pages.
+
+Setting ``API_PAGINATION_CLASS`` to ``None`` switches pagination off, and
+listings then return a bare JSON array.
+
+
+Filtering, Ordering and Search
+------------------------------
+
+====================  ==============================================================
+Parameter             Effect
+====================  ==============================================================
+``group__id``         Only notifications addressed to this group.
+``recipient__id``     Only notifications addressed to this recipient.
+``status``            Only notifications with this status.
+``public``            Only public, or only private, notifications.
+``timestamp_after``   Only notifications at or after this time.
+``timestamp_before``  Only notifications at or before this time.
+``search``            Case-insensitive match across ``API_SEARCH_FIELDS``.
+``ordering``          Order by a field in ``API_ORDERING_FIELDS``.
+====================  ==============================================================
+
+.. code-block:: bash
+
+   $ curl -H "Authorization: Bearer <token>" \
+       "http://localhost:8000/notifications/?status=CRITICAL&ordering=-timestamp&limit=20"
+
+Prefix the ordering field with ``-`` to sort descending. Only fields listed in
+``API_ORDERING_FIELDS`` are honoured — anything else is ignored rather than
+raising — so a client cannot sort by an arbitrary column. Listings are ordered
+newest first when no ordering is given.
+
+The ``search`` term is matched case-insensitively against every field named in
+``API_SEARCH_FIELDS``, which defaults to ``verb`` and ``description``.
+
+A different filter set can be supplied through ``API_FILTERSET_CLASS``.
+
+
+Throttling
+----------
+
+Requests are rate limited per user over a sliding window:
+
+=================  ==================================================  ==============
+Role               Setting                                             Default
+=================  ==================================================  ==============
+Authenticated      ``FASTAPI_NOTIFICATION_AUTHENTICATED_USER_THROTTLE_RATE``  30/minute
+Staff              ``FASTAPI_NOTIFICATION_STAFF_USER_THROTTLE_RATE``          100/minute
+=================  ==================================================  ==============
+
+Rates are written as ``number/time_unit``, where the unit is ``second``,
+``minute``, ``hour`` or ``day``. Exceeding the limit returns ``429`` with a
+``Retry-After`` header:
+
+.. code-block:: json
+
+   {"detail": "Request was throttled. Expected available in 42 seconds."}
+
+The default throttle records request times in memory, which is enough for a
+single process. If you run several workers, subclass
+``RoleBasedUserRateThrottle``, override ``get_history()`` to use a shared store
+such as Redis, and point ``API_THROTTLE_CLASS`` at your subclass. Setting
+``API_THROTTLE_CLASS`` to ``None`` turns throttling off.
+
+
+Permissions
+-----------
+
+Every route requires an authenticated user. If your current-user dependency
+returns ``None``, the response is ``401``:
+
+.. code-block:: json
+
+   {"detail": "Authentication credentials were not provided."}
+
+The two permanent-deletion routes additionally require the user to be staff,
+and return ``403`` otherwise:
+
+.. code-block:: json
+
+   {"detail": "You do not have permission to perform this action."}
+
+An extra permission can be applied to every route through
+``API_EXTRA_PERMISSION_CLASS``. The class is instantiated and called with the
+request and the user; returning a falsy value rejects the request with ``403``.
+Both synchronous and asynchronous implementations work:
+
+.. code-block:: python
+
+   class OnlyVerifiedUsers:
+       async def __call__(self, request, user) -> bool:
+           return user.is_verified
+
+
+   configure(API_EXTRA_PERMISSION_CLASS="myapp.permissions.OnlyVerifiedUsers")
+
+Beyond these route-level checks, the data itself is scoped to the caller: a
+listing only ever contains notifications addressed to that user or to a group
+they belong to, so one user cannot read another's notifications by guessing an
+identifier. See :doc:`roles` for how this differs by role.

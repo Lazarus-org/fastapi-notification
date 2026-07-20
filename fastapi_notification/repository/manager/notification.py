@@ -227,7 +227,11 @@ class NotificationDataAccessLayer:
         groups: Groups = None,
         display_detail: bool = False,
     ) -> Union[List[Notification], Rows]:
-        """Return every notification, excluding those that were deleted.
+        """Return every notification, whether sent, seen or soft deleted.
+
+        This is the unfiltered view. Unlike :meth:`sent`, :meth:`unsent`,
+        :meth:`seen` and :meth:`unseen`, it does not exclude notifications a
+        user has cleared, so it reports what is actually stored.
 
         Args:
             recipients (Recipients): The recipients of the notifications.

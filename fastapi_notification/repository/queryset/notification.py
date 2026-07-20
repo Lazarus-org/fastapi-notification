@@ -194,6 +194,9 @@ class NotificationQuerySet:
     ) -> Select:
         """Build a statement returning every notification.
 
+        This is the unfiltered view: soft deleted notifications are included,
+        since no viewer is given to exclude them for.
+
         Args:
             recipients (Recipients): The recipients of the notifications.
             groups (Groups): The groups of the notifications.
