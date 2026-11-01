@@ -25,9 +25,11 @@ class NotificationPermission:
     def user_has_permission(self, user: Any) -> bool:
         """Check permission against identity collections already in memory.
 
-        This synchronous helper remains useful for callers that have explicitly
-        hydrated a notification. Database-backed application code should use
-        :meth:`validate_permission_async`.
+        This synchronous helper is limited to already-hydrated notification and
+        identity data. An adapter with database-backed group membership must
+        implement ``get_user_group_ids_sync`` as well. Database-backed
+        application code should use :meth:`validate_permission_async`, which
+        calls the authoritative asynchronous adapter method.
         """
         adapter = get_identity_adapter()
         user_id = adapter.get_user_id(user)
@@ -35,10 +37,17 @@ class NotificationPermission:
             adapter.get_user_id(recipient) == user_id
             for recipient in getattr(self.notification, "recipient", [])
         )
-        user_group_ids = {
-            adapter.get_group_id(group)
-            for group in getattr(user, adapter.user_groups_attribute, []) or []
-        }
+        if is_recipient:
+            return True
+
+        group_resolver = getattr(adapter, "get_user_group_ids_sync", None)
+        if not callable(group_resolver):
+            raise RuntimeError(
+                "The configured identity adapter does not expose "
+                "get_user_group_ids_sync(); use validate_permission_async() or "
+                "implement the synchronous membership resolver."
+            )
+        user_group_ids = set(group_resolver(user))
         notification_group_ids = {
             adapter.get_group_id(group)
             for group in getattr(self.notification, "group", [])

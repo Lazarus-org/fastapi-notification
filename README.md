@@ -355,6 +355,12 @@ to use them. An extra permission class can be applied to every route through
 
 `NotificationDataAccessLayer` is the package's Python API. It is bound to a session, flushes its writes, and leaves the commit to you.
 
+Permanent deletion is privileged at the DAL boundary as well as in the HTTP API.
+Pass a staff identity as ``actor`` to ``delete_notification(..., soft_delete=False)``
+or ``delete_many(..., actor=staff_user)``. Missing actors, regular users and
+superusers who are not staff are rejected. The lower-level queryset functions
+are internal persistence primitives; application code should use the DAL.
+
 ```python
 dal = NotificationDataAccessLayer(session)
 ```
@@ -405,8 +411,10 @@ await dal.update_notification(notification_id, is_sent=True, public=False, data=
 # Soft delete — hidden for this user only, and a recipient is required.
 await dal.delete_notification(notification_id, recipient=user, soft_delete=True)
 
-# Hard delete — the row is destroyed.
-await dal.delete_notification(notification_id, soft_delete=False)
+# Hard delete — the row is destroyed; a staff actor is required.
+await dal.delete_notification(
+    notification_id, soft_delete=False, actor=staff_user
+)
 
 await session.commit()
 ```

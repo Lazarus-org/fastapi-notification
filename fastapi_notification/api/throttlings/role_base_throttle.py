@@ -78,9 +78,9 @@ class RoleBasedUserRateThrottle:
         self.base_rate: str = config.authenticated_user_throttle_rate
         self.staff_rate: str = config.staff_user_throttle_rate
 
-        from fastapi_notification.identity import get_identity_adapter
+        from fastapi_notification.identity import is_staff_identity
 
-        if get_identity_adapter().is_staff(user):
+        if is_staff_identity(user):
             return self.staff_rate
 
         return self.base_rate

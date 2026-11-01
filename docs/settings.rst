@@ -276,7 +276,10 @@ API_EXTRA_PERMISSION_CLASS
 ``None``
 
 An additional permission check applied to every route in both routers, on top
-of the authentication requirement. When unset, no extra check is added.
+of the authentication requirement. The configured class must have a
+no-argument constructor and a callable ``__call__(request, user)`` method; the
+method may be synchronous or asynchronous. A falsy result rejects the request
+with ``403``. When unset, no extra check is added.
 
 API_FILTERSET_CLASS
 ~~~~~~~~~~~~~~~~~~~

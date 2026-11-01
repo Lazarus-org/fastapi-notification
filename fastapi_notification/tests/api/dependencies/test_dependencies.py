@@ -12,6 +12,7 @@ from fastapi_notification.api.dependencies.auth import (
     get_current_user,
     make_admin_dependency,
     make_authenticated_dependency,
+    make_extra_permission_dependency,
     require_admin_user,
 )
 from fastapi_notification.api.dependencies.db import get_session
@@ -20,6 +21,7 @@ from fastapi_notification.api.dependencies.throttling import (
     enforce_throttle,
 )
 from fastapi_notification.api.routers.notification import create_router
+from fastapi_notification.identity import IdentityAdapter
 from fastapi_notification.models.auth import User
 from fastapi_notification.settings.conf import configure
 
@@ -278,3 +280,99 @@ async def test_the_admin_guard_refuses_superuser_without_staff() -> None:
         await guard(user=superuser)
 
     assert error.value.status_code == 403
+
+
+class AdminFlagUser:
+    """A host identity with a custom administrative flag."""
+
+    id = "custom-admin"
+    is_root = False
+    is_admin = True
+
+
+class AdminFlagIdentityAdapter(IdentityAdapter):
+    staff_attribute = "is_admin"
+    superuser_attribute = "is_root"
+
+
+async def test_admin_guard_uses_custom_identity_adapter_role_mapping() -> None:
+    """The staff-only administrative policy follows the configured adapter."""
+    configure(IDENTITY_ADAPTER=AdminFlagIdentityAdapter)
+    user = AdminFlagUser()
+    guard = make_admin_dependency(lambda: user)
+
+    assert await guard(user=user) is user
+
+
+async def test_extra_permission_dependency_uses_the_bound_user() -> None:
+    """The custom permission receives the same host identity as the route."""
+    user = Viewer(identifier=77)
+    seen = []
+
+    class CaptureUserPermission:
+        def __call__(self, request: Request, candidate: Any) -> bool:
+            seen.append((request.url.path, candidate))
+            return candidate is user
+
+    configure(API_EXTRA_PERMISSION_CLASS=CaptureUserPermission)
+    dependency = make_extra_permission_dependency(lambda: user)
+
+    result = await dependency(request=make_request(), user=user)
+
+    assert result is user
+    assert seen == [("/", user)]
+
+
+async def test_extra_permission_dependency_refuses_a_false_result() -> None:
+    """A configured permission remains an additional deny-only boundary."""
+    user = Viewer(identifier=78)
+
+    class DenyPermission:
+        def __call__(self, request: Request, candidate: Any) -> bool:
+            del request, candidate
+            return False
+
+    configure(API_EXTRA_PERMISSION_CLASS=DenyPermission)
+    dependency = make_extra_permission_dependency(lambda: user)
+
+    with pytest.raises(HTTPException) as raised:
+        await dependency(request=make_request(), user=user)
+
+    assert raised.value.status_code == 403
+
+
+async def test_extra_permission_also_gates_administrative_routes() -> None:
+    """The global extra-permission dependency cannot be bypassed by staff."""
+    configure(
+        API_EXTRA_PERMISSION_CLASS=DenyAll,
+        API_INCLUDE_HARD_DELETE=True,
+    )
+
+    async def get_test_session() -> Any:
+        yield None
+
+    async def get_staff_user() -> Any:
+        return Viewer(is_staff=True)
+
+    app = FastAPI()
+    app.include_router(
+        create_router(
+            session_dependency=get_test_session,
+            current_user_dependency=get_staff_user,
+        )
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.delete("/activities/delete_activities/")
+
+    assert response.status_code == 403
+
+
+async def test_admin_guard_accepts_superuser_who_is_also_staff() -> None:
+    """A superuser may administer when the host also marks them as staff."""
+    user = Viewer(is_staff=True, is_superuser=True)
+    guard = make_admin_dependency(lambda: user)
+
+    assert await guard(user=user) is user

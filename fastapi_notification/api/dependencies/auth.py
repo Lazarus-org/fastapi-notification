@@ -2,7 +2,7 @@ from typing import Any, Callable
 
 from fastapi import Depends, HTTPException, Request, status
 
-from fastapi_notification.identity import get_identity_adapter
+from fastapi_notification.identity import is_staff_identity
 from fastapi_notification.settings.conf import config
 
 
@@ -66,7 +66,7 @@ async def require_admin_user(user: Any = Depends(get_authenticated_user)) -> Any
         HTTPException: With status 403 when the user is not staff.
 
     """
-    if not get_identity_adapter().is_staff(user):
+    if not is_staff_identity(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to perform this action.",
@@ -208,7 +208,7 @@ def make_admin_dependency(
             HTTPException: With status 403 when the user is not staff.
 
         """
-        if not get_identity_adapter().is_staff(user):
+        if not is_staff_identity(user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have permission to perform this action.",

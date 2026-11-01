@@ -2,9 +2,15 @@ from typing import Any, List
 
 import pytest
 
+from fastapi_notification.identity import IdentityAdapter
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
+from fastapi_notification.repository.manager.notification import (
+    NotificationDataAccessLayer,
+)
+from fastapi_notification.repository.queryset import notification as queryset
+from fastapi_notification.settings.conf import configure
 
 pytestmark = [pytest.mark.models, pytest.mark.models_permissions]
 
@@ -77,7 +83,9 @@ def test_superuser_without_audience_membership_has_no_permission() -> None:
 def test_unrelated_user_has_no_permission() -> None:
     """Everyone else is refused."""
     user = FakeUser(4, groups=[FakeRecord(9)])
-    permission = NotificationPermission(FakeNotification([FakeRecord(1)], [FakeRecord(7)]))
+    permission = NotificationPermission(
+        FakeNotification([FakeRecord(1)], [FakeRecord(7)])
+    )
 
     assert permission.user_has_permission(user) is False
 
@@ -101,3 +109,146 @@ def test_validate_permission_raises_and_logs(
         permission.validate_permission(user, "delete")
 
     assert "without permission" in caplog.text
+
+
+class SlugGroup:
+    """A group represented by a non-integer slug identifier."""
+
+    def __init__(self, slug: str) -> None:
+        self.slug = slug
+
+
+class TeamsUser:
+    """A host identity exposing team membership instead of ``groups``."""
+
+    def __init__(self, identifier: str, teams: List[SlugGroup]) -> None:
+        self.uuid = identifier
+        self.teams = teams
+
+
+class TeamsIdentityAdapter(IdentityAdapter):
+    user_id_attribute = "uuid"
+    group_id_attribute = "slug"
+    user_groups_attribute = "teams"
+
+
+class DatabaseMembershipAdapter(IdentityAdapter):
+    """An adapter whose authoritative membership resolver is asynchronous."""
+
+    async def get_user_group_ids(self, session: Any, user: Any) -> List[str]:
+        del session, user
+        return ["remote-team"]
+
+
+class CachedDatabaseMembershipAdapter(DatabaseMembershipAdapter):
+    """An adapter that also exposes a preloaded synchronous membership view."""
+
+    def get_user_group_ids_sync(self, user: Any) -> List[str]:
+        return list(user.cached_group_ids)
+
+
+class CachedMembershipUser:
+    def __init__(self, identifier: int, cached_group_ids: List[str]) -> None:
+        self.id = identifier
+        self.cached_group_ids = cached_group_ids
+
+
+class SlugNotificationGroup:
+    def __init__(self, slug: str) -> None:
+        self.slug = slug
+
+
+def test_sync_permission_uses_custom_identity_group_attributes() -> None:
+    """The synchronous helper respects a host adapter's configured fields."""
+    configure(IDENTITY_ADAPTER=TeamsIdentityAdapter)
+    user = TeamsUser("user-uuid", [SlugGroup("moderators")])
+    notification = FakeNotification([], [SlugNotificationGroup("moderators")])
+
+    assert NotificationPermission(notification).user_has_permission(user) is True
+
+
+def test_sync_permission_rejects_async_only_membership_adapters() -> None:
+    """An async-only membership adapter cannot silently under-authorize sync checks."""
+    configure(IDENTITY_ADAPTER=DatabaseMembershipAdapter)
+    user = FakeUser(9, groups=[])
+    notification = FakeNotification([], [FakeRecord(7)])
+
+    with pytest.raises(RuntimeError, match="resolves group membership asynchronously"):
+        NotificationPermission(notification).user_has_permission(user)
+
+
+def test_sync_permission_supports_explicit_cached_membership_adapter() -> None:
+    """An adapter may expose a safe preloaded view for synchronous checks."""
+    configure(IDENTITY_ADAPTER=CachedDatabaseMembershipAdapter)
+    user = CachedMembershipUser(10, ["remote-team"])
+    notification = FakeNotification([], [FakeRecord("remote-team")])
+
+    assert NotificationPermission(notification).user_has_permission(user) is True
+
+
+@pytest.mark.asyncio
+async def test_dal_hard_delete_requires_a_staff_actor() -> None:
+    """The DAL does not expose an unguarded permanent-delete path."""
+    dal = NotificationDataAccessLayer(None)  # The guard runs before database I/O.
+    user = FakeUser(30, groups=[])
+
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await dal.delete_notification(1, soft_delete=False, actor=user)
+
+
+@pytest.mark.asyncio
+async def test_dal_hard_delete_requires_an_explicit_actor() -> None:
+    """Omitting the actor cannot silently turn a DAL call into admin access."""
+    dal = NotificationDataAccessLayer(None)
+
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await dal.delete_notification(1, soft_delete=False)
+
+
+@pytest.mark.asyncio
+async def test_dal_bulk_hard_delete_requires_a_staff_actor() -> None:
+    """Bulk deletion applies the same staff policy as single deletion."""
+    dal = NotificationDataAccessLayer(None)
+    user = FakeUser(31, groups=[])
+
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await dal.delete_many(None, actor=user)
+
+
+@pytest.mark.asyncio
+async def test_dal_hard_delete_rejects_superuser_without_staff() -> None:
+    """Superuser status does not bypass the DAL staff-only admin policy."""
+    dal = NotificationDataAccessLayer(None)
+    superuser = FakeUser(32, groups=[], is_superuser=True)
+
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await dal.delete_notification(1, soft_delete=False, actor=superuser)
+
+
+@pytest.mark.asyncio
+async def test_dal_bulk_hard_delete_requires_an_explicit_actor() -> None:
+    """The bulk DAL operation rejects a missing actor consistently."""
+    dal = NotificationDataAccessLayer(None)
+
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await dal.delete_many(None)
+
+
+@pytest.mark.asyncio
+async def test_low_level_query_delete_requires_staff_actor() -> None:
+    """The lower-level persistence helper cannot bypass the admin policy."""
+    user = FakeUser(33, groups=[])
+
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await queryset.delete_notification(
+            None, 1, soft_delete=False, actor=user
+        )
+
+
+@pytest.mark.asyncio
+async def test_low_level_bulk_delete_requires_staff_actor() -> None:
+    """The lower-level bulk persistence helper uses the same admin policy."""
+    user = FakeUser(34, groups=[])
+
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await queryset.delete_many(None, None, actor=user)

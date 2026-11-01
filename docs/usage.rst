@@ -366,7 +366,7 @@ ID.
    )
    await session.commit()
 
-``delete_notification(notification_id, recipient=None, soft_delete=True)``
+``delete_notification(notification_id, recipient=None, soft_delete=True, actor=None)``
 deletes one notification in either of two ways:
 
 - **Soft delete** (the default) records the deletion against ``recipient`` and
@@ -374,35 +374,39 @@ deletes one notification in either of two ways:
   **required**; without one, ``ValueError`` is raised. The recipient must be
   permitted to delete the notification, or ``PermissionError`` is raised.
 - **Hard delete** (``soft_delete=False``) removes the row outright, for every
-  recipient. A ``recipient`` may still be given, in which case the notification
-  must be visible to them.
+  recipient. It requires a staff identity passed as ``actor``. A ``recipient``
+  may still be given, in which case the notification must also be visible to
+  them.
 
 Either way, ``LookupError`` is raised when the notification does not exist or is
 not visible to the given recipient. When a recipient is supplied, access is
 limited to notifications addressed directly to that identity or to one of its
-groups, regardless of staff or superuser status. Omitting ``recipient`` for a
-hard delete is an unscoped operation intended for trusted application code; the
-package's public administrative endpoint separately requires staff permission.
+groups, regardless of staff or superuser status. A hard delete requires a staff
+``actor`` even when ``recipient`` is omitted; the DAL enforces the same
+staff-only administrative policy as the HTTP endpoints.
 
 .. code-block:: python
 
    # Hide it from Bob, leave it for everyone else.
    await dal.delete_notification(notification_id=42, recipient=bob)
 
-   # Remove it entirely.
-   await dal.delete_notification(notification_id=42, soft_delete=False)
+   # Remove it entirely; the actor must be staff.
+   await dal.delete_notification(
+       notification_id=42, soft_delete=False, actor=staff_user
+   )
 
    await session.commit()
 
-``delete_many(statement)`` permanently deletes every notification a statement
-selects, and returns how many rows were removed. The statement must select
-whole notifications, so build it with ``display_detail=True``.
+``delete_many(statement, actor=staff_user)`` permanently deletes every
+notification a statement selects, and returns how many rows were removed. A
+staff actor is mandatory. The statement must select whole notifications, so
+build it with ``display_detail=True``.
 
 .. code-block:: python
 
    statement = dal.deleted_statement(deleted_by=bob, display_detail=True)
 
-   removed = await dal.delete_many(statement)
+   removed = await dal.delete_many(statement, actor=staff_user)
    await session.commit()
 
 Statement Builders

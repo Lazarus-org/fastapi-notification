@@ -201,7 +201,7 @@ def create_activity_router(
             statement = routes.get_dal(session).sent_statement(display_detail=True)
             statement = filterset.filter_queryset(statement)
 
-            await routes.get_dal(session).delete_many(statement)
+            await routes.get_dal(session).delete_many(statement, actor=user)
             await session.commit()
 
             return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -320,7 +320,7 @@ def create_activity_router(
             """
             try:
                 await routes.get_dal(session).delete_notification(
-                    notification_id=notification_id, soft_delete=False
+                    notification_id=notification_id, soft_delete=False, actor=user
                 )
             except LookupError as error:
                 raise HTTPException(

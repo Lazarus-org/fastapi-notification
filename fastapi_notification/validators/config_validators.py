@@ -286,3 +286,60 @@ def validate_optional_classes_setting(
                 )
 
     return errors
+
+
+def validate_permission_class_setting(
+    setting_value: Any, setting_name: str
+) -> List[Error]:
+    """Validate the no-argument callable class used for extra permissions.
+
+    The package instantiates this class for each request and calls the resulting
+    object with ``(request, user)``. Validate the import and construction
+    contract during router startup instead of failing on the first request.
+    """
+    errors = validate_optional_class_setting(setting_value, setting_name)
+    if errors or setting_value is None:
+        return errors
+
+    permission_class = (
+        import_string(setting_value)
+        if isinstance(setting_value, str)
+        else setting_value
+    )
+    if not isinstance(permission_class, type):
+        return [
+            Error(
+                f"The setting '{setting_name}' must resolve to a permission class.",
+                hint=(
+                    "Provide a class with a no-argument constructor and a "
+                    "callable __call__(request, user) method."
+                ),
+                id=f"fastapi_notification.E017_{setting_name}",
+            )
+        ]
+
+    try:
+        permission = permission_class()
+    except Exception as error:  # pylint: disable=broad-except
+        return [
+            Error(
+                f"The permission class in '{setting_name}' cannot be instantiated: "
+                f"{error}",
+                hint=(
+                    "Provide a permission class with a no-argument constructor; "
+                    "request-specific data is supplied to __call__(request, user)."
+                ),
+                id=f"fastapi_notification.E018_{setting_name}",
+            )
+        ]
+
+    if not callable(permission):
+        return [
+            Error(
+                f"The permission class in '{setting_name}' is not callable.",
+                hint="Implement __call__(request, user) on the permission class.",
+                id=f"fastapi_notification.E019_{setting_name}",
+            )
+        ]
+
+    return []

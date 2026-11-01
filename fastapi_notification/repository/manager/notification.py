@@ -16,7 +16,10 @@ from fastapi_notification.constants.qs_types import (
     Rows,
     Target,
 )
-from fastapi_notification.identity import hydrate_notification_identities
+from fastapi_notification.identity import (
+    hydrate_notification_identities,
+    require_staff_identity,
+)
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.repository.queryset import notification as queryset
 
@@ -503,6 +506,7 @@ class NotificationDataAccessLayer:
         notification_id: int,
         recipient: Optional[Recipient] = None,
         soft_delete: bool = True,
+        actor: Any = None,
     ) -> None:
         """Delete, or soft delete, the notification with the given ID.
 
@@ -512,23 +516,39 @@ class NotificationDataAccessLayer:
                 delete. Required for soft deletes.
             soft_delete (bool): Whether to perform a soft delete. Defaults to
                 True.
+            actor (Any): Staff identity performing a permanent deletion.
+                Required when ``soft_delete`` is False.
+
+        Raises:
+            PermissionError: If permanent deletion is requested without a staff
+                actor.
 
         """
+        if not soft_delete:
+            require_staff_identity(actor)
+
         await queryset.delete_notification(
-            self.session, notification_id, recipient, soft_delete
+            self.session, notification_id, recipient, soft_delete, actor
         )
 
-    async def delete_many(self, statement: Select) -> int:
+    async def delete_many(self, statement: Select, *, actor: Any = None) -> int:
         """Permanently delete every notification matched by a statement.
+
+        This is a privileged operation and requires a staff ``actor``.
 
         Args:
             statement (Select): A statement selecting whole notifications.
+            actor (Any): Staff identity performing the deletion.
 
         Returns:
             int: The number of notifications deleted.
 
+        Raises:
+            PermissionError: If the actor is not staff.
+
         """
-        return await queryset.delete_many(self.session, statement)
+        require_staff_identity(actor)
+        return await queryset.delete_many(self.session, statement, actor=actor)
 
     async def mark_all_as_sent(
         self,

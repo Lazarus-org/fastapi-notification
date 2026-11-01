@@ -99,7 +99,8 @@ class User(AuthBase):
         email (str): The email address of the user.
         is_active (bool): Whether the account is usable.
         is_staff (bool): Whether the user has elevated, staff level access.
-        is_superuser (bool): Whether the user bypasses every permission check.
+        is_superuser (bool): The host application's superuser flag. The package
+            does not treat it as automatic notification audience or staff access.
         groups (List[Group]): The groups the user belongs to.
 
     """

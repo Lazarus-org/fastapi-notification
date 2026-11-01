@@ -164,6 +164,8 @@ applied to every route in both groups, and receives the request and the user:
 
    configure(API_EXTRA_PERMISSION_CLASS="myapp.permissions.OnlyVerifiedUsers")
 
-Returning a falsy value rejects the request with ``403``. This runs in addition
-to the built-in checks, so it can narrow access but not widen it. The dedicated
-staff guard for hard deletion remains separate.
+Returning a falsy value rejects the request with ``403``. The class must be
+constructible without arguments; request-specific context is supplied to
+``__call__``. This runs in addition to the built-in checks, so it can narrow
+access but not widen it. The dedicated staff guard for hard deletion remains
+separate and is also enforced by the DAL's permanent-deletion methods.

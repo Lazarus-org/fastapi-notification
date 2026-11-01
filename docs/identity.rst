@@ -37,7 +37,8 @@ The required methods are:
 
 ``get_user_group_ids(session, user)``
     Return group identifiers for a user. Override this when membership is
-    stored in a separate association table.
+    stored in a separate association table. This is the authoritative method
+    used by asynchronous permission checks and repository operations.
 
 ``is_staff(user)`` and ``is_superuser(user)``
     Return the host application's authorization flags.
@@ -45,6 +46,14 @@ The required methods are:
 ``resolve_users(session, user_ids)`` and ``resolve_groups(session, group_ids)``
     Return mappings keyed by normalized identifiers for API serialization. The
     base adapter returns ID-only references and performs no database query.
+
+The optional synchronous helper ``get_user_group_ids_sync(user)`` returns
+group identifiers from already-loaded in-memory membership data. The base
+implementation reads the configured ``user_groups_attribute``. If an adapter
+overrides the async method to query an external membership store, it must also
+override this synchronous helper to support the synchronous
+``NotificationPermission.user_has_permission`` method. Prefer the async
+``validate_permission_async`` method for database-backed code.
 
 Example
 -------
@@ -105,9 +114,9 @@ Identifier Storage
 Recipient, group, seen-by and deleted-by identifiers are converted to strings
 and limited to 255 characters before they are written. This preserves UUID and
 string identifiers while keeping association columns indexable. Existing
-integer IDs are stored as their base-10 string form. This checkpoint does not
-yet change the integer object-ID columns used by generic actor, target and
-action-object relations; that is tracked separately.
+integer IDs are stored as their base-10 string form. Generic actor, target and action-object identifiers are also stored as text
+and restored to the registered SQLAlchemy model's primary-key Python type when
+relations are resolved.
 
 Because this changes association column types and removes auth foreign keys,
 existing pre-release development databases should be recreated or migrated to

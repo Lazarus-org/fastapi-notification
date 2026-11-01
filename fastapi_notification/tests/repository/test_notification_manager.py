@@ -359,10 +359,13 @@ async def test_soft_delete_requires_a_recipient(
 async def test_hard_delete_removes_the_row(
     dal: NotificationDataAccessLayer,
     notification: Notification,
+    staff_user: User,
     session: AsyncSession,
 ) -> None:
-    """A hard delete destroys the notification."""
-    await dal.delete_notification(notification.id, soft_delete=False)
+    """A staff actor can hard-delete a notification."""
+    await dal.delete_notification(
+        notification.id, soft_delete=False, actor=staff_user
+    )
     await session.commit()
 
     assert await session.get(Notification, notification.id) is None
@@ -377,7 +380,10 @@ async def test_staff_cannot_delete_another_users_notification_with_recipient_sco
     """Passing a staff identity does not bypass recipient authorization."""
     with pytest.raises(LookupError, match="No notification found"):
         await dal.delete_notification(
-            notification.id, recipient=staff_user, soft_delete=False
+            notification.id,
+            recipient=staff_user,
+            soft_delete=False,
+            actor=staff_user,
         )
 
     await session.rollback()
@@ -494,24 +500,82 @@ async def test_delete_many_removes_every_match(
     dal: NotificationDataAccessLayer,
     notifications: List[Notification],
     user: User,
+    staff_user: User,
     session: AsyncSession,
 ) -> None:
-    """A statement's worth of notifications can be destroyed at once."""
+    """A staff actor can destroy every notification matched by a statement."""
     statement = dal.sent_statement(recipients=user, display_detail=True)
 
-    assert await dal.delete_many(statement) == 3
+    assert await dal.delete_many(statement, actor=staff_user) == 3
     await session.commit()
 
     assert await dal.count(dal.sent_statement(display_detail=True)) == 0
 
 
 async def test_delete_many_on_no_matches_is_a_no_op(
-    dal: NotificationDataAccessLayer, user: User
+    dal: NotificationDataAccessLayer, user: User, staff_user: User
 ) -> None:
-    """Deleting nothing reports nothing deleted."""
+    """A staff actor can delete an empty result set without side effects."""
     statement = dal.sent_statement(recipients=user, display_detail=True)
 
-    assert await dal.delete_many(statement) == 0
+    assert await dal.delete_many(statement, actor=staff_user) == 0
+
+
+
+
+async def test_hard_delete_requires_a_staff_actor(
+    dal: NotificationDataAccessLayer,
+    notification: Notification,
+    session: AsyncSession,
+) -> None:
+    """A direct DAL caller cannot bypass the staff-only admin policy."""
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await dal.delete_notification(notification.id, soft_delete=False)
+
+    await session.rollback()
+    assert await session.get(Notification, notification.id) is not None
+
+
+async def test_hard_delete_rejects_regular_user_actor(
+    dal: NotificationDataAccessLayer,
+    notification: Notification,
+    user: User,
+    session: AsyncSession,
+) -> None:
+    """An ordinary identity cannot hard-delete through the DAL."""
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await dal.delete_notification(
+            notification.id, soft_delete=False, actor=user
+        )
+
+    await session.rollback()
+    assert await session.get(Notification, notification.id) is not None
+
+
+async def test_hard_delete_rejects_superuser_without_staff(
+    dal: NotificationDataAccessLayer,
+    notification: Notification,
+    superuser_only: User,
+    session: AsyncSession,
+) -> None:
+    """Superuser status alone does not satisfy the administrative guard."""
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await dal.delete_notification(
+            notification.id, soft_delete=False, actor=superuser_only
+        )
+
+    await session.rollback()
+    assert await session.get(Notification, notification.id) is not None
+
+
+async def test_delete_many_requires_staff_actor(
+    dal: NotificationDataAccessLayer,
+    user: User,
+) -> None:
+    """Global deletion cannot be invoked through the DAL without staff."""
+    statement = dal.sent_statement(recipients=user, display_detail=True)
+    with pytest.raises(PermissionError, match="Staff permission is required"):
+        await dal.delete_many(statement, actor=user)
 
 
 async def test_the_query_set_is_exposed(dal: NotificationDataAccessLayer) -> None:

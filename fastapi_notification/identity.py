@@ -111,6 +111,33 @@ class IdentityAdapter:
         groups = getattr(user, self.user_groups_attribute, None) or []
         return [self.get_group_id(group) for group in groups]
 
+    def get_user_group_ids_sync(self, user: Any) -> Sequence[str]:
+        """Return group IDs from membership data already loaded in memory.
+
+        This synchronous counterpart is intended for the synchronous
+        ``NotificationPermission.user_has_permission`` helper. It never
+        performs database I/O. Adapters that override :meth:`get_user_group_ids`
+        to query an external membership store must also override this method if
+        they need synchronous permission checks. Otherwise the method raises
+        rather than silently making an incomplete authorization decision.
+
+        Database-backed application code should prefer
+        :meth:`get_user_group_ids`, which is the authoritative async contract.
+        """
+        if (
+            type(self).get_user_group_ids is not IdentityAdapter.get_user_group_ids
+            and type(self).get_user_group_ids_sync
+            is IdentityAdapter.get_user_group_ids_sync
+        ):
+            raise RuntimeError(
+                "This identity adapter resolves group membership asynchronously; "
+                "override get_user_group_ids_sync() for synchronous permission "
+                "checks or use validate_permission_async()."
+            )
+
+        groups = getattr(user, self.user_groups_attribute, None) or []
+        return [self.get_group_id(group) for group in groups]
+
     def is_staff(self, user: Any) -> bool:
         """Return whether the host application considers the user staff."""
         return bool(getattr(user, self.staff_attribute, False))
@@ -186,6 +213,24 @@ class BuiltInIdentityAdapter(IdentityAdapter):
             select(Group).where(cast(Group.id, String).in_(list(group_ids)))
         )
         return {self.get_group_id(group): group for group in result.scalars().all()}
+
+
+def is_staff_identity(user: Any) -> bool:
+    """Return the single package-wide administrative role decision.
+
+    Administrative hard deletion is intentionally staff-only. A superuser
+    flag does not imply staff status; applications that want a superuser to
+    administer notifications should expose both through their adapter.
+    """
+    return bool(get_identity_adapter().is_staff(user))
+
+
+def require_staff_identity(user: Any) -> None:
+    """Raise when an identity does not satisfy the staff-only admin policy."""
+    if user is None or not is_staff_identity(user):
+        raise PermissionError(
+            "Staff permission is required for administrative notification deletion."
+        )
 
 
 _cached_adapter_class: Optional[Type[Any]] = None
@@ -363,6 +408,8 @@ __all__ = [
     "IdentityReference",
     "get_identity_adapter",
     "hydrate_notification_identities",
+    "is_staff_identity",
+    "require_staff_identity",
     "index_resolved_identities",
     "normalize_identity_id",
 ]

@@ -27,7 +27,10 @@ from fastapi_notification.constants.qs_types import (
     Rows,
     Target,
 )
-from fastapi_notification.identity import get_identity_adapter
+from fastapi_notification.identity import (
+    get_identity_adapter,
+    require_staff_identity,
+)
 from fastapi_notification.models.content_type import (
     ContentType,
     normalize_object_id,
@@ -571,6 +574,7 @@ async def delete_notification(
     notification_id: int,
     recipient: Recipient = None,
     soft_delete: bool = True,
+    actor: Any = None,
 ) -> None:
     """Delete a notification, either softly or permanently.
 
@@ -591,6 +595,8 @@ async def delete_notification(
     """
     if soft_delete and recipient is None:
         raise ValueError("the recipient most be given if it is soft delete")
+    if not soft_delete:
+        require_staff_identity(actor)
 
     query_set = NotificationQuerySet()
 
@@ -721,17 +727,24 @@ async def clear_all(session: AsyncSession, user: Any) -> None:
     )
 
 
-async def delete_many(session: AsyncSession, statement: Select) -> int:
+async def delete_many(
+    session: AsyncSession, statement: Select, *, actor: Any = None
+) -> int:
     """Permanently delete every notification matched by a statement.
 
     Args:
         session (AsyncSession): The session used to write.
         statement (Select): A statement selecting whole notifications.
+        actor (Any): Staff identity required for permanent deletion.
 
     Returns:
         int: The number of notifications deleted.
 
+    Raises:
+        PermissionError: If the actor is not staff.
+
     """
+    require_staff_identity(actor)
     notifications = await fetch(session, statement, display_detail=True)
     identifiers = [notification.id for notification in notifications]
 

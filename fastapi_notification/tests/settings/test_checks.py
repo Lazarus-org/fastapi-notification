@@ -100,3 +100,47 @@ def test_an_incomplete_identity_adapter_is_reported() -> None:
     errors = check_notification_settings()
 
     assert any("identity adapter is invalid" in error.msg for error in errors)
+
+
+class NonCallablePermission:
+    """An invalid extra-permission class with no call contract."""
+
+
+def test_extra_permission_class_must_be_callable() -> None:
+    """Startup checks reject permission classes without ``__call__``."""
+    configure(API_EXTRA_PERMISSION_CLASS=NonCallablePermission)
+
+    errors = check_notification_settings()
+
+    assert any("is not callable" in error.msg for error in errors)
+
+
+def test_extra_permission_class_must_have_a_no_argument_constructor() -> None:
+    """Startup checks catch permission classes that cannot be instantiated."""
+
+    class RequiresArgumentPermission:
+        def __init__(self, required: str) -> None:
+            self.required = required
+
+        def __call__(self, request, user) -> bool:
+            return bool(self.required and request and user)
+
+    configure(API_EXTRA_PERMISSION_CLASS=RequiresArgumentPermission)
+
+    errors = check_notification_settings()
+
+    assert any("cannot be instantiated" in error.msg for error in errors)
+
+
+class CallablePermission:
+    """A valid no-argument permission dependency."""
+
+    def __call__(self, request, user) -> bool:
+        return bool(request and user)
+
+
+def test_valid_extra_permission_class_passes_startup_checks() -> None:
+    """A callable permission with the supported constructor is accepted."""
+    configure(API_EXTRA_PERMISSION_CLASS=CallablePermission)
+
+    assert check_notification_settings() == []

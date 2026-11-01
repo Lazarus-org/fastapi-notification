@@ -9,6 +9,7 @@ from fastapi_notification.validators.config_validators import (
     validate_boolean_setting,
     validate_list_fields,
     validate_optional_class_setting,
+    validate_permission_class_setting,
     validate_throttle_rate,
 )
 
@@ -45,7 +46,10 @@ def check_notification_settings(**kwargs: Any) -> List[Error]:
 
     identity_setting_name = f"{config.prefix}IDENTITY_ADAPTER"
     identity_setting_value = config.get_setting(identity_setting_name, None)
-    if isinstance(identity_setting_value, (str, type)) or identity_setting_value is None:
+    if (
+        isinstance(identity_setting_value, (str, type))
+        or identity_setting_value is None
+    ):
         errors.extend(
             validate_optional_class_setting(
                 identity_setting_value, identity_setting_name
@@ -153,7 +157,6 @@ def check_notification_settings(**kwargs: Any) -> List[Error]:
         "API_THROTTLE_CLASS",
         "API_PAGINATION_CLASS",
         "API_FILTERSET_CLASS",
-        "API_EXTRA_PERMISSION_CLASS",
     ):
         qualified = f"{config.prefix}{setting_name}"
         errors.extend(
@@ -161,6 +164,15 @@ def check_notification_settings(**kwargs: Any) -> List[Error]:
                 config.get_setting(qualified, None), qualified
             )
         )
+
+    errors.extend(
+        validate_permission_class_setting(
+            config.get_setting(
+                f"{config.prefix}API_EXTRA_PERMISSION_CLASS", None
+            ),
+            f"{config.prefix}API_EXTRA_PERMISSION_CLASS",
+        )
+    )
 
     return errors
 
