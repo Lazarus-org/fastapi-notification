@@ -144,17 +144,32 @@ registered so the stored content type can be resolved back into a class:
 
 .. code-block:: python
 
-   from fastapi_notification import Base, register_content_model
+   from sqlalchemy.orm import DeclarativeBase
+   from fastapi_notification import register_content_model
+
+
+   class HostBase(DeclarativeBase):
+       pass
 
 
    @register_content_model
-   class Post(Base):
+   class Post(HostBase):
        __tablename__ = "posts"
        ...
 
-Each relation is stored as a content type plus an object ID. Because generic
-relations cannot be loaded eagerly by the ORM, they are resolved on demand when
-a notification is read back:
+Each relation is stored as a content type plus an object ID. Generic object
+IDs use a text representation so the same columns can store integer, UUID and
+string primary keys. When a relation is resolved, the package reads the
+registered SQLAlchemy model's primary-key type and converts the stored value
+back before querying. Integer IDs therefore remain integers in Python,
+UUID IDs are returned as ``uuid.UUID`` objects, and string IDs are preserved
+exactly.
+
+The referenced model must have a single-column primary key. Composite primary
+keys are not supported by generic relations.
+
+Because generic relations cannot be loaded eagerly by the ORM, they are
+resolved on demand when a notification is read back:
 
 .. code-block:: python
 
@@ -165,7 +180,29 @@ a notification is read back:
    notification.action_object
 
 An object whose model is not registered in the current process resolves to
-``None``.
+``None``. Invalid stored identifiers also resolve to ``None`` rather than
+being passed to SQLAlchemy with the wrong Python type.
+
+For example, a model may use any of these primary-key declarations:
+
+.. code-block:: python
+
+   from uuid import UUID
+   from sqlalchemy import String, Uuid
+   from sqlalchemy.orm import Mapped, mapped_column
+
+   class UUIDPost(HostBase):
+       __tablename__ = "uuid_posts"
+       id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+
+   class ExternalRecord(HostBase):
+       __tablename__ = "external_records"
+       id: Mapped[str] = mapped_column(String(200), primary_key=True)
+
+The ``actor_object_id``, ``target_object_id`` and
+``action_object_object_id`` database columns are now text columns. This is a
+pre-release schema change: recreate local development tables or migrate those
+columns before upgrading an existing database.
 
 Querying Notifications
 ----------------------

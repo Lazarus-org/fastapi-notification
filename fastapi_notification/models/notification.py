@@ -12,7 +12,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from fastapi_notification.identity import (
     get_identity_adapter,
@@ -20,12 +20,17 @@ from fastapi_notification.identity import (
 )
 from fastapi_notification.models.associations import notification_group
 from fastapi_notification.models.base import Base, utcnow
-from fastapi_notification.models.content_type import ContentType, register_content_model
+from fastapi_notification.models.content_type import (
+    ContentType,
+    normalize_object_id,
+    register_content_model,
+)
 from fastapi_notification.models.helper.enums.status_choices import NotificationStatus
 from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
+from fastapi_notification.utils.loading import ensure_loaded
 from fastapi_notification.utils.naturaltime import naturaltime
 
 
@@ -44,11 +49,11 @@ class Notification(Base):
         description (Optional[str]): A description of the notification.
         status (str): The current status of the notification.
         actor_content_type_id (int): Content type of the actor initiating the action.
-        actor_object_id (int): ID of the actor object.
+        actor_object_id (str): Text-normalized ID of the actor object.
         target_content_type_id (Optional[int]): Content type of the target object.
-        target_object_id (Optional[int]): ID of the target object.
-        action_object_content_type_id (Optional[int]): Content type of the action object.
-        action_object_object_id (Optional[int]): ID of the action object.
+        target_object_id (Optional[str]): Text-normalized ID of the target object.
+        action_object_content_type_id (Optional[int]): Content type of the\n            action object.
+        action_object_object_id (Optional[str]): Text-normalized ID of the\n            action object.
         link (Optional[str]): URL associated with the action.
         is_sent (bool): Indicates if the notification has been sent.
         seen_by (List[Any]): Resolved host identities who have seen the notification.
@@ -98,8 +103,8 @@ class Notification(Base):
             " initiator of the notification)."
         ),
     )
-    actor_object_id: Mapped[int] = mapped_column(
-        Integer,
+    actor_object_id: Mapped[str] = mapped_column(
+        Text,
         nullable=False,
         comment="The unique ID of the actor object associated with the notification.",
     )
@@ -110,8 +115,8 @@ class Notification(Base):
             "The content type of the target object of the notification, if applicable."
         ),
     )
-    target_object_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
+    target_object_id: Mapped[Optional[str]] = mapped_column(
+        Text,
         nullable=True,
         comment=(
             "The unique ID of the target object associated with the notification,"
@@ -126,8 +131,8 @@ class Notification(Base):
             " if applicable."
         ),
     )
-    action_object_object_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
+    action_object_object_id: Mapped[Optional[str]] = mapped_column(
+        Text,
         nullable=True,
         comment=(
             "The unique ID of the action object associated with the notification,"
@@ -219,6 +224,19 @@ class Notification(Base):
     actor: ClassVar[Any] = None
     target: ClassVar[Any] = None
     action_object: ClassVar[Any] = None
+
+    @validates(
+        "actor_object_id", "target_object_id", "action_object_object_id"
+    )
+    def _normalize_generic_relation_identifier(
+        self, key: str, value: Any
+    ) -> Optional[str]:
+        """Normalize generic relation identifiers assigned through the ORM."""
+        if value is None:
+            if key == "actor_object_id":
+                raise TypeError("The actor generic relation requires an object ID.")
+            return None
+        return normalize_object_id(value)
 
     def __str__(self) -> str:
         """Return the description alongside the age of the notification.

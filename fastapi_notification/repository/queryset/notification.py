@@ -27,7 +27,10 @@ from fastapi_notification.constants.qs_types import (
     Target,
 )
 from fastapi_notification.identity import get_identity_adapter
-from fastapi_notification.models.content_type import ContentType
+from fastapi_notification.models.content_type import (
+    ContentType,
+    normalize_object_id,
+)
 from fastapi_notification.models.deleted_notification import DeletedNotification
 from fastapi_notification.models.notification import Notification, notification_group
 from fastapi_notification.models.notification_recipient import NotificationRecipient
@@ -493,16 +496,20 @@ async def create_notification(
         is_sent=is_sent,
         data=data,
         actor_content_type_id=actor_content_type.id,
-        actor_object_id=actor.id,
+        actor_object_id=normalize_object_id(actor.id),
         target_content_type_id=(
             target_content_type.id if target_content_type else None
         ),
-        target_object_id=target.id if target is not None else None,
+        target_object_id=(
+            normalize_object_id(target.id) if target is not None else None
+        ),
         action_object_content_type_id=(
             action_object_content_type.id if action_object_content_type else None
         ),
         action_object_object_id=(
-            action_object.id if action_object is not None else None
+            normalize_object_id(action_object.id)
+            if action_object is not None
+            else None
         ),
     )
 

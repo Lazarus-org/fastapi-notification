@@ -1,6 +1,8 @@
 from typing import Any, Dict, Optional, Tuple, Type
+from uuid import UUID
 
-from sqlalchemy import Integer, String, UniqueConstraint, select
+from sqlalchemy import Integer, String, UniqueConstraint, inspect, select
+from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,6 +11,89 @@ from fastapi_notification.models.base import Base
 # Registry of models that may participate in a generic relation, keyed by the
 # ``(app_label, model)`` pair that identifies them in the ``content_type`` table.
 _CONTENT_TYPE_REGISTRY: Dict[Tuple[str, str], Type[Any]] = {}
+
+
+def normalize_object_id(object_id: Any) -> str:
+    """Normalize a supported generic-relation primary key for persistence.
+
+    Integer, UUID and string identifiers are stored in a common textual
+    representation. The original Python type is recovered from the registered
+    model's SQLAlchemy primary-key column when the object is loaded.
+
+    Args:
+        object_id (Any): The model instance primary key.
+
+    Returns:
+        str: The canonical textual representation of the identifier.
+
+    Raises:
+        TypeError: If the identifier is not an integer, UUID or string.
+    """
+    if isinstance(object_id, bool) or not isinstance(object_id, (int, UUID, str)):
+        raise TypeError(
+            "Generic relation primary keys must be integers, UUIDs or strings."
+        )
+    return str(object_id)
+
+
+def coerce_object_id(model: Type[Any], object_id: Any) -> Any:
+    """Convert a stored generic-relation identifier to its model PK type.
+
+    Only single-column primary keys are supported. SQLAlchemy's mapped primary
+    key type is authoritative, so UUID strings become ``uuid.UUID`` instances,
+    integer strings become integers, and string identifiers remain unchanged.
+
+    Args:
+        model (Type[Any]): The registered SQLAlchemy model.
+        object_id (Any): The persisted textual identifier.
+
+    Returns:
+        Any: The identifier converted to the model's primary-key Python type.
+
+    Raises:
+        TypeError: If the model has a composite primary key or an unsupported
+            primary-key type.
+        ValueError: If the stored identifier cannot be converted.
+    """
+    try:
+        mapper = inspect(model)
+    except NoInspectionAvailable as exc:
+        raise TypeError(
+            "The registered content model is not a SQLAlchemy model."
+        ) from exc
+
+    primary_keys = mapper.primary_key
+    if len(primary_keys) != 1:
+        raise TypeError(
+            "Generic relations require models with a single-column primary key."
+        )
+
+    try:
+        primary_key_type = primary_keys[0].type.python_type
+    except (AttributeError, NotImplementedError) as exc:
+        raise TypeError(
+            "The model primary-key column does not expose a supported Python type."
+        ) from exc
+
+    if primary_key_type is str:
+        return str(object_id)
+    if primary_key_type is int:
+        if isinstance(object_id, bool):
+            raise ValueError("Boolean values are not valid integer identifiers.")
+        return int(object_id)
+    if primary_key_type is UUID:
+        return object_id if isinstance(object_id, UUID) else UUID(str(object_id))
+
+    if isinstance(object_id, primary_key_type):
+        return object_id
+
+    try:
+        return primary_key_type(object_id)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TypeError(
+            f"Unsupported generic relation primary-key type: "
+            f"{primary_key_type.__name__}."
+        ) from exc
 
 
 def natural_key_for_model(model: Type[Any]) -> Tuple[str, str]:
@@ -129,20 +214,44 @@ class ContentType(Base):
         return get_registered_model(self.app_label, self.model)
 
     async def get_object_for_this_type(
-        self, session: AsyncSession, object_id: int
+        self, session: AsyncSession, object_id: Any
     ) -> Optional[Any]:
-        """Load a single instance of the referenced model by primary key.
+        """Load a referenced object using its model-specific primary-key type.
+
+        Stored generic identifiers are textual so integer, UUID and string
+        primary keys share one persistence representation. Before querying,
+        the identifier is converted back to the SQLAlchemy model's PK type.
 
         Args:
             session (AsyncSession): The session used to read.
-            object_id (int): The primary key of the instance to load.
+            object_id (Any): The stored primary-key identifier.
 
         Returns:
-            Optional[Any]: The instance, or ``None`` when the model is not
-            registered or no row matches.
+            Optional[Any]: The instance, or ``None`` when the model is
+            unregistered, the identifier is invalid, or no row matches.
+
+        Raises:
+            TypeError: If the registered model is not mapped or does not have
+                a supported single-column primary key.
 
         """
         model = self.model_class()
-        if model is None:
+        if model is None or object_id is None:
             return None
-        return await session.get(model, object_id)
+
+        try:
+            typed_object_id = coerce_object_id(model, object_id)
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+        return await session.get(model, typed_object_id)
+
+
+__all__ = [
+    "ContentType",
+    "coerce_object_id",
+    "get_registered_model",
+    "natural_key_for_model",
+    "normalize_object_id",
+    "register_content_model",
+]

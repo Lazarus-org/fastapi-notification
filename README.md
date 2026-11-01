@@ -17,7 +17,7 @@ It is built on async SQLAlchemy 2.0 and Pydantic v2, and it is the FastAPI count
 ## Highlights
 
 - **Two endpoint groups** — unseen notifications, and the activity history of everything already seen.
-- **Anything can be an actor** — notifications reference an actor, a target and an action object generically, so any of your own models can take those roles.
+- **Anything can be an actor** — notifications reference an actor, a target and an action object generically, so any of your own models can take those roles. Generic relations support integer, UUID and string primary keys.
 - **Addressed to users or groups** — a notification reaches named recipients, every member of a group, or both.
 - **Soft and hard deletion** — clearing a notification hides it for one user while leaving it intact for the others; permanent deletion is available to administrators and off by default.
 - **Configurable throughout** — serializers, fields, pagination, throttling, filtering and permissions are all driven from settings, and routes you switch off are never registered at all.
