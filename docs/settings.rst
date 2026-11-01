@@ -79,6 +79,7 @@ Example Configuration
    from fastapi_notification import configure
 
    configure(
+       IDENTITY_ADAPTER="myapp.identity.AppIdentityAdapter",
        API_INCLUDE_SOFT_DELETE=True,
        API_INCLUDE_HARD_DELETE=True,
        API_ALLOW_LIST=True,
@@ -97,6 +98,29 @@ Example Configuration
 
 Settings Reference
 ------------------
+
+IDENTITY_ADAPTER
+~~~~~~~~~~~~~~~~
+
+**Type:** ``IdentityAdapter`` (class, instance, or dotted path) — **Default:**
+``fastapi_notification.identity.IdentityAdapter``
+
+The adapter is the integration boundary between notification persistence and
+the host application's authentication and group-membership models. It supplies
+normalized user and group identifiers, membership lookups, staff/superuser
+flags, and optional user/group resolution for API serialization.
+
+The default adapter uses conventional identity attributes and returns ID-only
+references without querying user or group tables. Applications using the
+optional package ``User`` and ``Group`` models can opt into
+``BuiltInIdentityAdapter``. Applications with custom identity models can
+subclass ``IdentityAdapter`` and configure that class here (or with
+``configure(IDENTITY_ADAPTER=...)``). See :doc:`identity` for examples.
+
+The core notification metadata does not include the optional authentication
+tables. Those models use the separate ``AuthBase`` metadata and are not required
+when a host adapter is configured.
+
 
 Every name below is written without its prefix. In the environment, prepend
 ``FASTAPI_NOTIFICATION_``.
@@ -183,12 +207,13 @@ Setting it also forces queries to select whole notification instances.
 USER_SERIALIZER_FIELDS
 ~~~~~~~~~~~~~~~~~~~~~~
 
-**Type:** ``List[str]`` — **Default:** ``["username", "email"]``
+**Type:** ``List[str]`` — **Default:** ``["id"]``
 
 The user fields included when a notification's related users are serialized.
-The default is derived from the user model's ``USERNAME_FIELD`` and
-``REQUIRED_FIELDS``, which on the packaged ``User`` model are ``username`` and
-``email``. The list must not be empty.
+The default is the normalized identity identifier, so serialization does not
+assume that the host user model exposes a username or email field. Configure
+this list to expose host-specific fields when ``resolve_users`` returns host
+user objects. The list must not be empty.
 
 USER_SERIALIZER_CLASS
 ~~~~~~~~~~~~~~~~~~~~~

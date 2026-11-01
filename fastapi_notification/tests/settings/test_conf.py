@@ -6,6 +6,7 @@ from fastapi_notification.api.paginations.limit_offset_pagination import (
 from fastapi_notification.api.throttlings.role_base_throttle import (
     RoleBasedUserRateThrottle,
 )
+from fastapi_notification.identity import IdentityAdapter
 from fastapi_notification.settings.conf import (
     NotificationConfig,
     config,
@@ -24,7 +25,7 @@ def test_defaults_are_applied() -> None:
     assert config.api_allow_retrieve is True
     assert config.api_ordering_fields == ["id", "timestamp", "public"]
     assert config.api_search_fields == ["verb", "description"]
-    assert config.user_serializer_fields == ["username", "email"]
+    assert config.user_serializer_fields == ["id"]
 
 
 def test_default_classes_are_imported() -> None:
@@ -32,6 +33,7 @@ def test_default_classes_are_imported() -> None:
     assert config.api_throttle_class is RoleBasedUserRateThrottle
     assert config.api_pagination_class is DefaultLimitOffSetPagination
     assert config.notification_serializer_class is None
+    assert config.identity_adapter is IdentityAdapter
 
 
 def test_configure_overrides_a_setting() -> None:

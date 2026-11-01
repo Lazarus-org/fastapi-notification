@@ -20,7 +20,7 @@ async def test_recipients_are_linked_to_the_notification(
     )
     links = result.scalars().all()
 
-    assert [link.recipient_id for link in links] == [user.id]
+    assert [link.recipient_id for link in links] == [str(user.id)]
 
 
 async def test_str_falls_back_when_relationships_are_absent(

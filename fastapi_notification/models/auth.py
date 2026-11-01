@@ -3,19 +3,19 @@ from typing import List
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from fastapi_notification.models.base import Base
+from fastapi_notification.models.base import AuthBase
 from fastapi_notification.models.content_type import register_content_model
 
 user_group = Table(
     "user_group",
-    Base.metadata,
+    AuthBase.metadata,
     Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
     Column("group_id", ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True),
 )
 
 group_permission = Table(
     "group_permission",
-    Base.metadata,
+    AuthBase.metadata,
     Column("group_id", ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True),
     Column(
         "permission_id",
@@ -26,13 +26,12 @@ group_permission = Table(
 
 
 @register_content_model
-class Permission(Base):
+class Permission(AuthBase):
     """A named capability that can be attached to a group.
 
     Attributes:
         name (str): The human readable description of the permission.
         codename (str): The machine readable identifier of the permission.
-
     """
 
     __tablename__ = "permissions"
@@ -47,20 +46,18 @@ class Permission(Base):
 
         Returns:
             str: The human readable permission name.
-
         """
         return self.name
 
 
 @register_content_model
-class Group(Base):
-    """A collection of users that notifications can be addressed to.
+class Group(AuthBase):
+    """An optional collection of users that notifications can be addressed to.
 
     Attributes:
         name (str): The unique name of the group.
         permissions (List[Permission]): The permissions granted by the group.
         users (List[User]): The members of the group.
-
     """
 
     __tablename__ = "groups"
@@ -81,18 +78,17 @@ class Group(Base):
 
         Returns:
             str: The name of the group.
-
         """
         return self.name
 
 
 @register_content_model
-class User(Base):
+class User(AuthBase):
     """The default user model shipped with the package.
 
-    Host applications with their own user table can point the package at it by
-    overriding the ``current user`` dependency; this model exists so the package
-    is usable, and fully testable, on its own.
+    This optional example model lives on ``AuthBase`` rather than the core
+    notification ``Base``. Host applications with their own identity models can
+    configure an ``IdentityAdapter`` and omit these tables entirely.
 
     Attributes:
         username (str): The unique identifier used to address the user.
@@ -101,7 +97,6 @@ class User(Base):
         is_staff (bool): Whether the user has elevated, staff level access.
         is_superuser (bool): Whether the user bypasses every permission check.
         groups (List[Group]): The groups the user belongs to.
-
     """
 
     __tablename__ = "users"
@@ -128,6 +123,5 @@ class User(Base):
 
         Returns:
             str: The username of the user.
-
         """
         return self.username

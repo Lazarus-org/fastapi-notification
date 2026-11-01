@@ -82,3 +82,21 @@ def test_run_checks_raises_and_lists_every_problem() -> None:
     assert len(raised.value.errors) == 2
     assert "API_ALLOW_LIST" in str(raised.value)
     assert "API_ALLOW_RETRIEVE" in str(raised.value)
+
+
+def test_a_missing_identity_adapter_is_reported() -> None:
+    """The identity adapter is required and cannot be disabled."""
+    configure(IDENTITY_ADAPTER=None)
+
+    errors = check_notification_settings()
+
+    assert any("identity adapter is not configured" in error.msg for error in errors)
+
+
+def test_an_incomplete_identity_adapter_is_reported() -> None:
+    """A class without the adapter contract is rejected at startup."""
+    configure(IDENTITY_ADAPTER=object)
+
+    errors = check_notification_settings()
+
+    assert any("identity adapter is invalid" in error.msg for error in errors)

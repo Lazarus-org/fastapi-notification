@@ -1,0 +1,114 @@
+Identity Integration
+====================
+
+``fastapi-notification`` does not own authentication, users, groups, or group
+membership. It stores recipient, seen-by, deleted-by and group identifiers as
+opaque strings and delegates identity-specific behavior to an adapter. This
+allows integer, UUID and string primary keys without foreign keys to host auth
+tables.
+
+Core and Optional Models
+------------------------
+
+Notification models are declared on ``Base``. The example ``User``, ``Group``
+and ``Permission`` models use the separate ``AuthBase`` metadata. Applications
+using their own identity models should create only ``Base.metadata`` and omit
+``AuthBase.metadata``.
+
+The built-in models remain available for standalone examples and tests. To use
+them, create both metadata collections and configure
+``IDENTITY_ADAPTER="fastapi_notification.identity.BuiltInIdentityAdapter"``.
+
+Adapter Contract
+----------------
+
+Subclass :class:`~fastapi_notification.identity.IdentityAdapter` and configure
+the class or an instance before creating the router. The base adapter supports conventional
+``id``, ``groups``, ``is_staff`` and ``is_superuser`` attributes. Override the
+attribute names or methods when your application differs.
+
+The required methods are:
+
+``get_user_id(user)``
+    Return the stable user identifier.
+
+``get_group_id(group)``
+    Return the stable group identifier.
+
+``get_user_group_ids(session, user)``
+    Return group identifiers for a user. Override this when membership is
+    stored in a separate association table.
+
+``is_staff(user)`` and ``is_superuser(user)``
+    Return the host application's authorization flags.
+
+``resolve_users(session, user_ids)`` and ``resolve_groups(session, group_ids)``
+    Return mappings keyed by normalized identifiers for API serialization. The
+    base adapter returns ID-only references and performs no database query.
+
+Example
+-------
+
+.. code-block:: python
+
+   from typing import Any, Mapping, Sequence
+
+   from sqlalchemy import String, cast, select
+   from sqlalchemy.ext.asyncio import AsyncSession
+
+   from fastapi_notification import IdentityAdapter, configure
+   from myapp.models import AppGroup, AppUser
+
+
+   class AppIdentityAdapter(IdentityAdapter):
+       user_id_attribute = "uuid"
+       group_id_attribute = "slug"
+       user_groups_attribute = "groups"
+       staff_attribute = "is_admin"
+       superuser_attribute = "is_root"
+
+       async def resolve_users(
+           self, session: AsyncSession, user_ids: Sequence[str]
+       ) -> Mapping[str, Any]:
+           result = await session.scalars(
+               select(AppUser).where(cast(AppUser.uuid, String).in_(list(user_ids)))
+           )
+           return {str(user.uuid): user for user in result.all()}
+
+       async def resolve_groups(
+           self, session: AsyncSession, group_ids: Sequence[str]
+       ) -> Mapping[str, Any]:
+           result = await session.scalars(
+               select(AppGroup).where(AppGroup.slug.in_(list(group_ids)))
+           )
+           return {str(group.slug): group for group in result.all()}
+
+
+   configure(
+       IDENTITY_ADAPTER=AppIdentityAdapter,
+       USER_SERIALIZER_FIELDS=["uuid"],
+       GROUP_SERIALIZER_CLASS="myapp.serializers.AppGroupSerializer",
+   )
+
+The default ``USER_SERIALIZER_FIELDS=["id"]`` works with ID-only references.
+When resolving host records, configure the serializer fields to match the
+attributes exposed by those models.
+
+When querying ``Notification`` directly with SQLAlchemy, call
+``await notification.load_identities(session)`` before reading its transient
+``recipient``, ``group`` or ``seen_by`` projections. The data access layer and
+HTTP routes hydrate these projections automatically.
+
+Identifier Storage
+------------------
+
+Recipient, group, seen-by and deleted-by identifiers are converted to strings
+and limited to 255 characters before they are written. This preserves UUID and
+string identifiers while keeping association columns indexable. Existing
+integer IDs are stored as their base-10 string form. This checkpoint does not
+yet change the integer object-ID columns used by generic actor, target and
+action-object relations; that is tracked separately.
+
+Because this changes association column types and removes auth foreign keys,
+existing pre-release development databases should be recreated or migrated to
+the new schema before using this checkpoint.

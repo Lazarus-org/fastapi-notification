@@ -40,8 +40,9 @@ For SQLite, which is enough to try the package out:
 2. Create the Tables
 --------------------
 
-The package ships its own SQLAlchemy models on a declarative ``Base``. Create
-the tables from that metadata, or point Alembic at it if you manage migrations.
+The core notification tables live on the package declarative ``Base``. They do
+not reference or require package-owned user or group tables. Create the tables
+from that metadata, or point Alembic at it if you manage migrations.
 
 .. code-block:: python
 
@@ -57,15 +58,26 @@ the tables from that metadata, or point Alembic at it if you manage migrations.
        async with engine.begin() as connection:
            await connection.run_sync(Base.metadata.create_all)
 
-If your application already has a declarative base, the package's tables can
-live alongside it: ``Base.metadata`` is ordinary SQLAlchemy metadata.
+If you want to use the optional example ``User``, ``Group`` and ``Permission``
+models, create their separate metadata too:
+
+.. code-block:: python
+
+   from fastapi_notification import AuthBase
+
+   async with engine.begin() as connection:
+       await connection.run_sync(AuthBase.metadata.create_all)
+
+Applications with their own identity models should omit this step. The default
+``IdentityAdapter`` does not query package-owned user or group tables. To use the
+optional models, configure ``IDENTITY_ADAPTER="fastapi_notification.identity.BuiltInIdentityAdapter"``.
 
 
-3. Supply the Two Dependencies
-------------------------------
+3. Supply the Database and Authentication Dependencies
+-------------------------------------------------------
 
-The package does not own your database session or your authentication, so it
-asks for both. Supply them when you build the router.
+The package does not own your database session or authentication. Supply both,
+then use an identity adapter to integrate your application's identity models.
 
 .. code-block:: python
 
@@ -96,9 +108,10 @@ asks for both. Supply them when you build the router.
        )
    )
 
-The user object you return needs an ``id``, an ``is_staff`` flag, and a
-``groups`` collection. The packaged :class:`~fastapi_notification.models.auth.User`
-model provides all three, but any object will do.
+By default, the adapter expects ``id``, ``is_staff``, ``is_superuser`` and
+``groups`` attributes. If your application uses different identity fields or
+stores group membership separately, configure a custom ``IdentityAdapter``.
+Identity IDs are stored as strings, supporting integer, UUID and string keys.
 
 Instead of passing the dependencies, you may override the package's
 placeholders through FastAPI's ``dependency_overrides``:
@@ -111,7 +124,61 @@ placeholders through FastAPI's ``dependency_overrides``:
    app.dependency_overrides[get_current_user] = my_user_dependency
 
 
-4. (Optional) Configure the Package
+4. Integrate Your Identity Models
+---------------------------------
+
+The package does not create foreign keys to host user or group tables. Its
+recipient and membership association tables store normalized string IDs.
+
+Subclass ``IdentityAdapter`` when your application uses non-standard fields:
+
+.. code-block:: python
+
+   from typing import Any, Mapping, Sequence
+
+   from sqlalchemy import String, cast, select
+   from sqlalchemy.ext.asyncio import AsyncSession
+
+   from fastapi_notification import IdentityAdapter, configure
+   from myapp.models import AppGroup, AppUser
+
+
+   class AppIdentityAdapter(IdentityAdapter):
+       user_id_attribute = "uuid"
+       group_id_attribute = "slug"
+       user_groups_attribute = "groups"
+       staff_attribute = "is_admin"
+       superuser_attribute = "is_root"
+
+       async def resolve_users(
+           self, session: AsyncSession, user_ids: Sequence[str]
+       ) -> Mapping[str, Any]:
+           result = await session.scalars(
+               select(AppUser).where(cast(AppUser.uuid, String).in_(list(user_ids)))
+           )
+           return {str(user.uuid): user for user in result.all()}
+
+       async def resolve_groups(
+           self, session: AsyncSession, group_ids: Sequence[str]
+       ) -> Mapping[str, Any]:
+           result = await session.scalars(
+               select(AppGroup).where(AppGroup.slug.in_(list(group_ids)))
+           )
+           return {str(group.slug): group for group in result.all()}
+
+
+   configure(
+       IDENTITY_ADAPTER=AppIdentityAdapter,
+       USER_SERIALIZER_FIELDS=["uuid"],
+       GROUP_SERIALIZER_CLASS="myapp.serializers.AppGroupSerializer",
+   )
+
+Override ``get_user_group_ids(session, user)`` when memberships are stored in a
+separate association table. The base adapter returns lightweight ID-only
+representations if custom ``resolve_users`` or ``resolve_groups`` methods are
+not needed.
+
+5. (Optional) Configure the Package
 -----------------------------------
 
 Every setting has a working default, so this step is optional. Settings can be
@@ -142,7 +209,7 @@ startup rather than on the first request. See :doc:`settings` for the full
 reference.
 
 
-5. Create Notifications
+6. Create Notifications
 -----------------------
 
 Notifications are created through the data access layer.
@@ -191,7 +258,7 @@ its model is registered:
        ...
 
 
-6. Verify
+7. Verify
 ---------
 
 Start your application and call the API as an authenticated user:

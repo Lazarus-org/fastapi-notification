@@ -440,11 +440,11 @@ The package ships its own SQLAlchemy models on a declarative ``Base``:
     used as an actor, target or action object.
 
 ``User``
-    The default user model: ``username``, ``email``, ``is_active``,
-    ``is_staff``, ``is_superuser`` and a ``groups`` collection. Applications
-    with their own user table can point the package at it instead by overriding
-    the current-user dependency; this model exists so the package is usable, and
-    fully testable, on its own.
+    An optional example user model: ``username``, ``email``, ``is_active``,
+    ``is_staff``, ``is_superuser`` and a ``groups`` collection. It lives on
+    ``AuthBase`` rather than the core notification metadata. Applications with
+    their own identity models should configure an ``IdentityAdapter``; the
+    current-user dependency alone does not select or map a host user table.
 
 ``Group``
     A named collection of users that notifications can be addressed to, with

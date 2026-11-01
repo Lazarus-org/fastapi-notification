@@ -24,7 +24,6 @@ class ThrottleHistory:
     Deployments running several workers should point the throttle at a shared
     store by subclassing :class:`RoleBasedUserRateThrottle` and overriding
     :meth:`RoleBasedUserRateThrottle.get_history`.
-
     """
 
     def __init__(self) -> None:
@@ -38,7 +37,6 @@ class ThrottleHistory:
 
         Returns:
             Deque[float]: The timestamps of that identity's recent requests.
-
         """
         return self._entries[key]
 
@@ -58,7 +56,6 @@ class RoleBasedUserRateThrottle:
     ``AUTHENTICATED_USER_THROTTLE_RATE`` (30 a minute by default), while staff
     users get the higher ``STAFF_USER_THROTTLE_RATE`` (100 a minute). Both come
     from settings, so the limits can be tuned without touching code.
-
     """
 
     scope: str = "user"
@@ -71,14 +68,15 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             str: The rate, as ``"number/time_unit"``.
-
         """
         from fastapi_notification.settings.conf import config
 
         self.base_rate: str = config.authenticated_user_throttle_rate
         self.staff_rate: str = config.staff_user_throttle_rate
 
-        if getattr(user, "is_staff", False):
+        from fastapi_notification.identity import get_identity_adapter
+
+        if get_identity_adapter().is_staff(user):
             return self.staff_rate
 
         return self.base_rate
@@ -95,7 +93,6 @@ class RoleBasedUserRateThrottle:
 
         Raises:
             ValueError: If the rate is not in the expected format.
-
         """
         try:
             number, _, unit = rate.partition("/")
@@ -117,9 +114,18 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             str: The history key.
-
         """
-        return f"throttle_{self.scope}_{getattr(user, 'id', 'anonymous')}"
+        from fastapi_notification.identity import get_identity_adapter
+
+        adapter = get_identity_adapter()
+        try:
+            identity = adapter.get_user_id(user)
+        except ValueError:
+            if user is not None and hasattr(user, adapter.user_id_attribute):
+                raise
+            identity = "anonymous"
+
+        return f"throttle_{self.scope}_{identity}"
 
     def get_history(self) -> ThrottleHistory:
         """Return the store request times are recorded in.
@@ -129,7 +135,6 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             ThrottleHistory: The history store.
-
         """
         return history
 
@@ -144,7 +149,6 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             bool: True if the request is allowed, False if it is throttled.
-
         """
         num_requests, duration = self.parse_rate(self.get_rate(user))
 
@@ -168,7 +172,6 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             float: The number of seconds to wait; zero when not throttled.
-
         """
         _, duration = self.parse_rate(self.get_rate(user))
         timestamps = self.get_history().get(self.get_cache_key(user))

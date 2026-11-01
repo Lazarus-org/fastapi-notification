@@ -4,18 +4,21 @@ from typing import Any, ClassVar, Dict, List, Optional
 from sqlalchemy import (
     JSON,
     Boolean,
-    Column,
     DateTime,
     ForeignKey,
     Integer,
     String,
-    Table,
     Text,
+    select,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from fastapi_notification.models.auth import Group, User
+from fastapi_notification.identity import (
+    get_identity_adapter,
+    hydrate_notification_identities,
+)
+from fastapi_notification.models.associations import notification_group
 from fastapi_notification.models.base import Base, utcnow
 from fastapi_notification.models.content_type import ContentType, register_content_model
 from fastapi_notification.models.helper.enums.status_choices import NotificationStatus
@@ -23,19 +26,7 @@ from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
-from fastapi_notification.utils.loading import ensure_loaded
 from fastapi_notification.utils.naturaltime import naturaltime
-
-notification_group = Table(
-    "notification_group",
-    Base.metadata,
-    Column(
-        "notification_id",
-        ForeignKey("notification.id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-    Column("group_id", ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True),
-)
 
 
 @register_content_model
@@ -47,8 +38,8 @@ class Notification(Base):
     content type and object id pair.
 
     Attributes:
-        recipient (List[User]): Users receiving the notification.
-        group (List[Group]): Groups receiving the notification.
+        recipient (List[Any]): Resolved host identities receiving the notification.
+        group (List[Any]): Resolved host groups receiving the notification.
         verb (str): The action verb associated with the notification.
         description (Optional[str]): A description of the notification.
         status (str): The current status of the notification.
@@ -60,14 +51,18 @@ class Notification(Base):
         action_object_object_id (Optional[int]): ID of the action object.
         link (Optional[str]): URL associated with the action.
         is_sent (bool): Indicates if the notification has been sent.
-        seen_by (List[User]): Users who have seen the notification.
+        seen_by (List[Any]): Resolved host identities who have seen the notification.
         public (bool): Indicates if the notification is public.
         data (Optional[dict]): Additional metadata associated with the notification.
         timestamp (datetime): Time when the notification was created.
-
     """
 
     __tablename__ = "notification"
+    __serializable_identity_fields__: ClassVar[tuple[str, ...]] = (
+        "recipient",
+        "group",
+        "seen_by",
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     verb: Mapped[str] = mapped_column(
@@ -81,9 +76,7 @@ class Notification(Base):
     description: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,
-        comment=(
-            "A textual description providing more detail about the notification."
-        ),
+        comment=("A textual description providing more detail about the notification."),
     )
     status: Mapped[str] = mapped_column(
         String(15),
@@ -177,23 +170,35 @@ class Notification(Base):
         comment="The date and time when this notification was created.",
     )
 
-    recipient: Mapped[List[User]] = relationship(
-        secondary="notification_recipient",
-        primaryjoin="Notification.id == NotificationRecipient.notification_id",
-        secondaryjoin="NotificationRecipient.recipient_id == User.id",
-        viewonly=True,
-        lazy="selectin",
-    )
-    group: Mapped[List[Group]] = relationship(
-        secondary=notification_group, lazy="selectin"
-    )
-    seen_by: Mapped[List[User]] = relationship(
-        secondary="notification_seen",
-        primaryjoin="Notification.id == NotificationSeen.notification_id",
-        secondaryjoin="NotificationSeen.user_id == User.id",
-        viewonly=True,
-        lazy="selectin",
-    )
+    # These collections are transient identity projections populated by the
+    # configured adapter. They deliberately are not ORM relationships: the
+    # notification schema must not require host user or group tables.
+    @property
+    def recipient(self) -> List[Any]:
+        """Return resolved recipient identities for this notification."""
+        return self.__dict__.get("_recipient_identities", [])
+
+    @recipient.setter
+    def recipient(self, value: List[Any]) -> None:
+        self.__dict__["_recipient_identities"] = value
+
+    @property
+    def group(self) -> List[Any]:
+        """Return resolved group identities for this notification."""
+        return self.__dict__.get("_group_identities", [])
+
+    @group.setter
+    def group(self, value: List[Any]) -> None:
+        self.__dict__["_group_identities"] = value
+
+    @property
+    def seen_by(self) -> List[Any]:
+        """Return resolved identities that have seen this notification."""
+        return self.__dict__.get("_seen_by_identities", [])
+
+    @seen_by.setter
+    def seen_by(self, value: List[Any]) -> None:
+        self.__dict__["_seen_by_identities"] = value
 
     actor_content_type: Mapped[Optional[ContentType]] = relationship(
         foreign_keys=[actor_content_type_id], lazy="selectin"
@@ -217,7 +222,6 @@ class Notification(Base):
 
         Returns:
             str: The string representation of the notification.
-
         """
         return f"{self.description} {naturaltime(self.timestamp)}"
 
@@ -226,13 +230,10 @@ class Notification(Base):
 
         Returns:
             str: The generated title for the notification.
-
         """
         if self.target:
             if self.action_object:
-                return (
-                    f"{self.actor} {self.verb} {self.action_object} on {self.target}"
-                )
+                return f"{self.actor} {self.verb} {self.action_object} on {self.target}"
             return f"{self.actor} {self.verb} {self.target}"
         if self.action_object:
             return f"{self.actor} {self.verb} {self.action_object}"
@@ -250,7 +251,6 @@ class Notification(Base):
         Returns:
             Notification: This notification, with its generic relations
             populated.
-
         """
         await ensure_loaded(
             session,
@@ -278,6 +278,22 @@ class Notification(Base):
 
         return self
 
+    async def load_identities(self, session: AsyncSession) -> "Notification":
+        """Resolve recipient, group, and seen-by identities for this instance.
+
+        ORM relationships to host authentication models are intentionally not
+        declared. Use this method after loading a notification directly through
+        SQLAlchemy; the data access layer and HTTP routes call it automatically.
+
+        Args:
+            session (AsyncSession): The session used to resolve host identities.
+
+        Returns:
+            Notification: This notification with its identity projections loaded.
+        """
+        await hydrate_notification_identities(session, [self])
+        return self
+
     async def mark_as_seen(self, session: AsyncSession, user: Any) -> None:
         """Mark the notification as seen by a specific user.
 
@@ -291,14 +307,23 @@ class Notification(Base):
         Raises:
             PermissionError: If the user does not have permission to mark the
                 notification as seen.
-
         """
-        await ensure_loaded(session, self, "recipient", "group", "seen_by")
-        await ensure_loaded(session, user, "groups")
-        NotificationPermission(self).validate_permission(user, "mark as seen")
+        await NotificationPermission(self).validate_permission_async(
+            session, user, "mark as seen"
+        )
 
-        if any(seen_user.id == user.id for seen_user in self.seen_by):
+        user_id = get_identity_adapter().get_user_id(user)
+        existing = await session.execute(
+            select(NotificationSeen.id).where(
+                NotificationSeen.notification_id == self.id,
+                NotificationSeen.user_id == user_id,
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
             return
 
-        session.add(NotificationSeen(notification_id=self.id, user_id=user.id))
+        session.add(NotificationSeen(notification_id=self.id, user_id=user_id))
         await session.flush()
+        current_seen = list(self.seen_by)
+        current_seen.append(user)
+        self.seen_by = current_seen

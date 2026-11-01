@@ -4,6 +4,7 @@ from typing import Any, List, Optional
 from fastapi import Query, Request
 from sqlalchemy import ColumnElement, Select, or_
 
+from fastapi_notification.identity import get_identity_adapter
 from fastapi_notification.models.notification import Notification, notification_group
 from fastapi_notification.models.notification_recipient import NotificationRecipient
 from fastapi_notification.settings.conf import config
@@ -15,15 +16,14 @@ class NotificationFilter:
     Replaces the ``django-filter`` filter set, the search backend and the
     ordering backend of the original package with a single dependency driven by
     query parameters.
-
     """
 
     def __init__(
         self,
-        group__id: Optional[int] = Query(
+        group__id: Optional[str] = Query(
             None, description="Filter notifications sent to this group."
         ),
-        recipient__id: Optional[int] = Query(
+        recipient__id: Optional[str] = Query(
             None, description="Filter notifications sent to this recipient."
         ),
         status: Optional[str] = Query(
@@ -63,7 +63,6 @@ class NotificationFilter:
 
         Returns:
             List[ColumnElement[bool]]: The conditions to apply.
-
         """
         conditions: List[ColumnElement[bool]] = []
 
@@ -72,7 +71,10 @@ class NotificationFilter:
                 Notification.id.in_(
                     notification_group.select()
                     .with_only_columns(notification_group.c.notification_id)
-                    .where(notification_group.c.group_id == self.group__id)
+                    .where(
+                        notification_group.c.group_id
+                        == get_identity_adapter().get_group_id(self.group__id)
+                    )
                 )
             )
 
@@ -81,7 +83,10 @@ class NotificationFilter:
                 Notification.id.in_(
                     NotificationRecipient.__table__.select()
                     .with_only_columns(NotificationRecipient.notification_id)
-                    .where(NotificationRecipient.recipient_id == self.recipient__id)
+                    .where(
+                        NotificationRecipient.recipient_id
+                        == get_identity_adapter().get_user_id(self.recipient__id)
+                    )
                 )
             )
 
@@ -108,7 +113,6 @@ class NotificationFilter:
         Returns:
             Optional[ColumnElement[bool]]: The condition, or ``None`` when no
             search term was given.
-
         """
         if not self.search:
             return None
@@ -136,7 +140,6 @@ class NotificationFilter:
         Returns:
             Select: The ordered statement, unchanged when the requested field is
             not allowed.
-
         """
         if not self.ordering:
             return statement
@@ -163,7 +166,6 @@ class NotificationFilter:
 
         Returns:
             Select: The narrowed statement.
-
         """
         for condition in self.filter_conditions():
             statement = statement.where(condition)
@@ -184,6 +186,5 @@ def get_filterset(request: Request) -> Any:
 
     Returns:
         Any: The configured filter set class, or :class:`NotificationFilter`.
-
     """
     return config.api_filterset_class or NotificationFilter

@@ -19,7 +19,7 @@ async def test_create_records_the_viewer(
     await session.commit()
 
     assert seen.notification_id == notification.id
-    assert seen.user_id == user.id
+    assert seen.user_id == str(user.id)
     assert seen.seen_at is not None
 
 
@@ -47,7 +47,7 @@ async def test_create_allows_a_group_member(
     seen = await NotificationSeen.create(session, created, group_user)
     await session.commit()
 
-    assert seen.user_id == group_user.id
+    assert seen.user_id == str(group_user.id)
 
 
 async def test_str_names_the_user_and_notification(

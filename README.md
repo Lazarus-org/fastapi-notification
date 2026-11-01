@@ -70,7 +70,7 @@ You will also need an async database driver, for example `asyncpg` for PostgreSQ
 
 ## 2. Create the Tables
 
-The package ships its own SQLAlchemy models on a declarative `Base`. Create the tables from that metadata, or point Alembic at it if you manage migrations.
+The core notification tables live on the package declarative `Base`. They do not reference or require a package-owned user or group table. Create the notification tables from that metadata, or point Alembic at it if you manage migrations.
 
 ```python
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -86,11 +86,20 @@ async def create_tables() -> None:
         await connection.run_sync(Base.metadata.create_all)
 ```
 
-If your application already has a declarative base, the package's tables can live alongside it: `Base.metadata` is ordinary SQLAlchemy metadata.
+If you want to use the optional example `User`, `Group`, and `Permission` models, create their separate metadata as well:
 
-## 3. Supply the Two Dependencies
+```python
+from fastapi_notification import AuthBase
 
-The package does not own your database session or your authentication, so it asks for both.
+async with engine.begin() as connection:
+    await connection.run_sync(AuthBase.metadata.create_all)
+```
+
+Applications with their own identity models should omit `AuthBase.metadata.create_all`. The default `IdentityAdapter` does not query package-owned user or group tables. To use the optional example models, configure `IDENTITY_ADAPTER="fastapi_notification.identity.BuiltInIdentityAdapter"`. The notification tables can also be incorporated into an application's Alembic environment as ordinary SQLAlchemy metadata.
+
+## 3. Supply the Database and Authentication Dependencies
+
+The package does not own your database session or authentication. Supply both, then configure an identity adapter so the package can work with your application's user and group models.
 
 ```python
 from typing import Any, AsyncIterator
@@ -121,7 +130,7 @@ app.include_router(
 )
 ```
 
-The user object you return needs an `id`, an `is_staff` flag, and a `groups` collection. The packaged `User` model provides all three, but any object will do.
+By default, the adapter expects the user object to expose `id`, `is_staff`, `is_superuser`, and `groups`. It returns ID-only identity references and does not query user or group tables. If your model uses different fields or stores memberships separately, configure an `IdentityAdapter` subclass. User and group identifiers are stored as opaque strings, so integer, UUID, and string primary keys are supported.
 
 Instead of passing the dependencies, you may override the package's placeholders through FastAPI's `dependency_overrides`:
 
@@ -132,7 +141,52 @@ app.dependency_overrides[get_session] = my_session_dependency
 app.dependency_overrides[get_current_user] = my_user_dependency
 ```
 
-## 4. (Optional) Configure the Package
+## 4. Integrate Your User and Group Models
+
+The package does not create foreign keys to your authentication tables. Recipient, seen-by, deleted-by, and group associations store normalized identity identifiers. The optional built-in auth models are kept on `AuthBase`; the core notification schema remains on `Base`. The default `IdentityAdapter` does not require or query the optional auth tables.
+
+For a host application with non-standard identity fields, subclass `IdentityAdapter` and configure it before creating the router:
+
+```python
+from typing import Any, Mapping, Sequence
+
+from sqlalchemy import String, cast, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi_notification import IdentityAdapter, configure
+from myapp.models import AppGroup, AppUser
+
+
+class AppIdentityAdapter(IdentityAdapter):
+    user_id_attribute = "uuid"
+    group_id_attribute = "slug"
+    user_groups_attribute = "groups"
+    staff_attribute = "is_admin"
+    superuser_attribute = "is_root"
+
+    async def resolve_users(
+        self, session: AsyncSession, user_ids: Sequence[str]
+    ) -> Mapping[str, Any]:
+        result = await session.scalars(
+            select(AppUser).where(cast(AppUser.uuid, String).in_(list(user_ids)))
+        )
+        return {str(user.uuid): user for user in result.all()}
+
+    async def resolve_groups(
+        self, session: AsyncSession, group_ids: Sequence[str]
+    ) -> Mapping[str, Any]:
+        result = await session.scalars(
+            select(AppGroup).where(AppGroup.slug.in_(list(group_ids)))
+        )
+        return {str(group.slug): group for group in result.all()}
+
+
+configure(IDENTITY_ADAPTER=AppIdentityAdapter)
+```
+
+If your application stores group membership in a separate association model rather than `user.groups`, override `get_user_group_ids(session, user)` and return the normalized group IDs. If the base adapter's lightweight ID-only representation is sufficient, you do not need to override `resolve_users` or `resolve_groups`. Configure `USER_SERIALIZER_FIELDS` and `GROUP_SERIALIZER_CLASS` to control how resolved host objects appear in API responses.
+
+## 5. (Optional) Configure the Package
 
 Every setting has a working default, so this step is optional. Settings can be registered from Python:
 
@@ -154,7 +208,7 @@ export FASTAPI_NOTIFICATION_AUTHENTICATED_USER_THROTTLE_RATE="60/minute"
 
 Configure the package **before** building the router: the router reads its settings when it is created, and a route disabled in settings is never registered.
 
-## 5. Create Notifications
+## 6. Create Notifications
 
 ```python
 from fastapi_notification import NotificationDataAccessLayer
@@ -194,7 +248,7 @@ class Post(Base):
     ...
 ```
 
-## 6. Verify
+## 7. Verify
 
 ```bash
 $ curl -H "Authorization: Bearer <token>" http://localhost:8000/notifications/
@@ -358,7 +412,7 @@ Fields left out of `update_notification` keep their previous value. Deleting som
 | `NotificationSeen`            | Records that a user has seen a notification.                  |
 | `DeletedNotification`         | Records that a user has soft-deleted a notification.          |
 | `ContentType`                 | Identifies the model behind a generic actor/target reference. |
-| `User`, `Group`, `Permission` | The packaged auth models.                                     |
+| `User`, `Group`, `Permission` | Optional auth examples on `AuthBase`, separate from core tables. |
 
 `NotificationStatus` provides the available statuses: `ERROR`, `SUCCESS`, `WARNING`, `INFO`, `CRITICAL`, `SENSITIVE` and `INFRASTRUCTURE`.
 
@@ -370,6 +424,7 @@ Settings resolve in order of precedence: values registered through `configure()`
 
 | Setting                            | Type        | Default                        | Purpose                                              |
 |------------------------------------|-------------|--------------------------------|------------------------------------------------------|
+| `IDENTITY_ADAPTER`                | class / instance / str | `IdentityAdapter`               | Integrate host user and group models.                |
 | `API_INCLUDE_SOFT_DELETE`          | bool        | `True`                         | Register the clearing routes.                        |
 | `API_INCLUDE_HARD_DELETE`          | bool        | `False`                        | Register the permanent-deletion routes.              |
 | `API_ALLOW_LIST`                   | bool        | `True`                         | Register the listing routes.                         |
@@ -378,7 +433,7 @@ Settings resolve in order of precedence: values registered through `configure()`
 | `SERIALIZER_EXCLUDE_NULL_FIELDS`   | bool        | `False`                        | Strip null fields from responses.                    |
 | `SERIALIZER_FIELDS`                | list / None | `None`                         | Serve exactly these notification fields.             |
 | `SERIALIZER_CLASS`                 | str / None  | `None`                         | Replace the notification serializer.                 |
-| `USER_SERIALIZER_FIELDS`           | list        | `["username", "email"]`        | Fields included when a user is nested in a response. |
+| `USER_SERIALIZER_FIELDS`           | list        | `["id"]`                       | Fields included when a user is nested in a response. |
 | `USER_SERIALIZER_CLASS`            | str / None  | `None`                         | Replace the user serializer.                         |
 | `GROUP_SERIALIZER_CLASS`           | str / None  | `None`                         | Replace the group serializer.                        |
 | `AUTHENTICATED_USER_THROTTLE_RATE` | str         | `"30/minute"`                  | Rate limit for regular users.                        |

@@ -1,15 +1,15 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from fastapi_notification.identity import get_identity_adapter
 from fastapi_notification.models.base import Base, utcnow
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
-from fastapi_notification.utils.loading import ensure_loaded
 from fastapi_notification.utils.username import get_username
 
 
@@ -18,7 +18,7 @@ class NotificationSeen(Base):
 
     Attributes:
         notification_id (int): The notification that was seen.
-        user_id (int): The recipient, or group member, who saw it.
+        user_id (str): The host user identifier who saw the notification.
         seen_at (datetime): When the notification was marked as seen.
 
     Usage Example:
@@ -26,7 +26,6 @@ class NotificationSeen(Base):
         validated before the record is written::
 
             seen = await NotificationSeen.create(session, notification, user)
-
     """
 
     __tablename__ = "notification_seen"
@@ -39,9 +38,7 @@ class NotificationSeen(Base):
     notification_id: Mapped[int] = mapped_column(
         ForeignKey("notification.id", ondelete="CASCADE"), nullable=False
     )
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -51,12 +48,15 @@ class NotificationSeen(Base):
 
         Returns:
             str: A representation naming the user and the notification.
-
         """
         user = getattr(self, "user", None)
         notification = getattr(self, "notification", None)
         username = get_username(user) if user is not None else "Unknown"
-        user_id = user.id if user is not None else self.user_id
+        user_id = (
+            get_identity_adapter().get_user_id(user)
+            if user is not None
+            else self.user_id
+        )
         return f"{username} (ID: {user_id}) has seen ({notification})"
 
     @classmethod
@@ -80,15 +80,14 @@ class NotificationSeen(Base):
 
         Raises:
             PermissionError: If the user is not allowed to see the notification.
-
         """
-        await ensure_loaded(session, notification, "recipient", "group")
-        await ensure_loaded(session, user, "groups")
-        NotificationPermission(notification).validate_permission(user, "mark as seen")
+        await NotificationPermission(notification).validate_permission_async(
+            session, user, "mark as seen"
+        )
 
         instance = cls(
             notification_id=notification.id,
-            user_id=user.id,
+            user_id=get_identity_adapter().get_user_id(user),
             seen_at=seen_at or utcnow(),
         )
         session.add(instance)

@@ -448,7 +448,7 @@ async def test_deleted_notifications_are_excluded_from_listings(
 ) -> None:
     """A cleared notification stops appearing for the user who cleared it."""
     session.add(
-        DeletedNotification(notification_id=notification.id, user_id=user.id)
+        DeletedNotification(notification_id=notification.id, user_id=str(user.id))
     )
     await session.commit()
 

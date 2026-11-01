@@ -12,18 +12,20 @@ def utcnow() -> datetime:
 
     Returns:
         datetime: The current moment in UTC.
-
     """
     return datetime.now(timezone.utc)
 
 
+class AuthBase(DeclarativeBase):
+    """Declarative base for optional built-in authentication example models."""
+
+
 class Base(DeclarativeBase):
-    """Declarative base shared by every model in the package.
+    """Declarative base for notification persistence models.
 
-    Host applications that already own a declarative base can rebind the package
-    models onto it, but the common case is to let ``fastapi-notification`` create
-    its own tables from this metadata.
-
+    The optional built-in authentication examples use :class:`AuthBase` and a
+    separate metadata collection, so applications using their own identities do
+    not create or depend on package-owned user and group tables.
     """
 
     def to_dict(self) -> Dict[str, Any]:
@@ -31,7 +33,6 @@ class Base(DeclarativeBase):
 
         Returns:
             Dict[str, Any]: A mapping of column name to column value.
-
         """
         return {
             column.name: getattr(self, column.name)

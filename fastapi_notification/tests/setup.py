@@ -4,7 +4,9 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from fastapi_notification.api.routers.notification import create_router
+from fastapi_notification.identity import BuiltInIdentityAdapter
 from fastapi_notification.models.auth import User
+from fastapi_notification.settings.conf import configure
 
 
 def build_app(
@@ -23,7 +25,6 @@ def build_app(
 
     Returns:
         FastAPI: The configured application.
-
     """
 
     async def get_session() -> AsyncIterator[AsyncSession]:
@@ -31,7 +32,6 @@ def build_app(
 
         Yields:
             AsyncSession: The session.
-
         """
         async with session_factory() as session:
             yield session
@@ -41,7 +41,6 @@ def build_app(
 
         Returns:
             Any: The user, or ``None`` when the test is anonymous.
-
         """
         user_id = current_user.get("id")
         if user_id is None:
@@ -50,6 +49,7 @@ def build_app(
         async with session_factory() as session:
             return await session.get(User, user_id)
 
+    configure(IDENTITY_ADAPTER=BuiltInIdentityAdapter)
     app = FastAPI()
     app.include_router(
         create_router(
@@ -74,7 +74,6 @@ def make_app_factory(
 
     Returns:
         Callable[..., FastAPI]: The application factory.
-
     """
 
     def factory(prefix: str = "") -> FastAPI:

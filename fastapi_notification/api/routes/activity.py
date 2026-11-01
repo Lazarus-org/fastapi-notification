@@ -13,6 +13,7 @@ from fastapi_notification.api.dependencies.db import get_session
 from fastapi_notification.api.filters.notification_filter import NotificationFilter
 from fastapi_notification.api.routes.base import BaseNotificationRoutes
 from fastapi_notification.api.schemas.notification import NotificationSerializer
+from fastapi_notification.identity import get_identity_adapter
 from fastapi_notification.settings.conf import config
 
 
@@ -33,7 +34,6 @@ class ActivityRoutes(BaseNotificationRoutes):
     Permissions:
     - Regular Users: Can list, retrieve and clear their own notifications.
     - Admin Users: Can additionally hard delete notifications, when enabled.
-
     """
 
     async def get_statement(
@@ -54,11 +54,10 @@ class ActivityRoutes(BaseNotificationRoutes):
 
         Returns:
             Select: The statement.
-
         """
         dal = self.get_dal(session)
 
-        if getattr(user, "is_staff", False):
+        if get_identity_adapter().is_staff(user):
             return dal.seen_statement(seen_by=user, display_detail=True)
 
         groups = await self.get_user_groups(session, user)
@@ -95,7 +94,6 @@ def create_activity_router(
 
     Returns:
         APIRouter: The configured router.
-
     """
     from fastapi_notification.settings.checks import run_checks
 
@@ -133,7 +131,6 @@ def create_activity_router(
 
             Returns:
                 Dict[str, Any]: The paginated activities.
-
             """
             return await routes.list_notifications(request, session, user, filterset)
 
@@ -156,7 +153,6 @@ def create_activity_router(
 
             Returns:
                 Response: An empty 204 response.
-
             """
             await routes.get_dal(session).clear_all(user)
             await session.commit()
@@ -186,7 +182,6 @@ def create_activity_router(
 
             Returns:
                 Response: An empty 204 response.
-
             """
             statement = await routes.get_statement(session, user, display_detail=True)
             statement = filterset.filter_queryset(statement)
@@ -219,14 +214,11 @@ def create_activity_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist or is not visible to the user.
-
             """
             statement = await routes.get_statement(session, user, display_detail=True)
             statement = filterset.filter_queryset(statement)
 
-            notification = await routes.get_dal(session).get(
-                statement, notification_id
-            )
+            notification = await routes.get_dal(session).get(statement, notification_id)
 
             if notification is None:
                 raise HTTPException(
@@ -260,7 +252,6 @@ def create_activity_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist or is not visible to the user.
-
             """
             try:
                 await routes.get_dal(session).delete_notification(
@@ -300,7 +291,6 @@ def create_activity_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist.
-
             """
             try:
                 await routes.get_dal(session).delete_notification(

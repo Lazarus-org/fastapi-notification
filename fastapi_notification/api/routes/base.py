@@ -8,13 +8,16 @@ from fastapi_notification.api.schemas.dynamic_notification import (
     NotificationDynamicSerializer,
 )
 from fastapi_notification.api.schemas.notification import NotificationSerializer
+from fastapi_notification.identity import (
+    get_identity_adapter,
+    hydrate_notification_identities,
+)
 from fastapi_notification.mixins import ConfigurableAttrsMixin, DisableMethodsMixin
 from fastapi_notification.repository.manager.notification import (
     NotificationDataAccessLayer,
 )
 from fastapi_notification.repository.queryset import notification as queryset
 from fastapi_notification.settings.conf import config
-from fastapi_notification.utils.loading import ensure_loaded
 
 
 class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
@@ -23,7 +26,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
     Holds the parts the two routers have in common: choosing how much detail to
     return based on the viewer's role and the settings, picking a serializer to
     match, and running a listing through filtering, counting and pagination.
-
     """
 
     def __init__(self, user_dependency: Optional[Callable[..., Any]] = None) -> None:
@@ -35,7 +37,7 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
         if not config.api_allow_retrieve:
             self.disable_methods(["RETRIEVE"])
 
-    async def get_user_groups(self, session: AsyncSession, user: Any) -> Sequence[Any]:
+    async def get_user_groups(self, session: AsyncSession, user: Any) -> Sequence[str]:
         """Return the groups the current user belongs to.
 
         Args:
@@ -43,11 +45,9 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
             user (Any): The current user.
 
         Returns:
-            Sequence[Any]: The user's groups.
-
+            Sequence[str]: The normalized identifiers of the user's groups.
         """
-        await ensure_loaded(session, user, "groups")
-        return list(user.groups)
+        return list(await get_identity_adapter().get_user_group_ids(session, user))
 
     def wants_detail(self, display_detail: bool) -> bool:
         """Decide whether whole notifications should be selected.
@@ -61,7 +61,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             bool: Whether whole notifications should be selected.
-
         """
         return bool(
             display_detail
@@ -78,9 +77,11 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             Type[Any]: The serializer class to use.
-
         """
-        if getattr(user, "is_staff", False) or config.include_serializer_full_details:
+        if (
+            get_identity_adapter().is_staff(user)
+            or config.include_serializer_full_details
+        ):
             return NotificationSerializer
 
         return config.notification_serializer_class or NotificationDynamicSerializer
@@ -93,7 +94,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             NotificationDataAccessLayer: The data access layer.
-
         """
         return NotificationDataAccessLayer(session)
 
@@ -115,7 +115,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Raises:
             NotImplementedError: Always; each router supplies its own.
-
         """
         raise NotImplementedError
 
@@ -140,7 +139,9 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
         """
         # Staff always see full details, so the statement and the fetch must
         # agree on how much is selected before either runs.
-        display_detail = self.wants_detail(False) or getattr(user, "is_staff", False)
+        display_detail = self.wants_detail(False) or get_identity_adapter().is_staff(
+            user
+        )
 
         statement = await self.get_statement(
             session, user, display_detail=display_detail
@@ -154,6 +155,8 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
         rows = await queryset.fetch(session, paged, display_detail=display_detail)
 
         serializer = self.get_serializer_class(user)
+        if display_detail:
+            await hydrate_notification_identities(session, rows)
         results: List[Dict[str, Any]] = serializer.to_representation_many(rows)
 
         return self.paginate(request, results, total)

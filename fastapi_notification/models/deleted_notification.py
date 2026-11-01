@@ -1,15 +1,15 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from fastapi_notification.identity import get_identity_adapter
 from fastapi_notification.models.base import Base, utcnow
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
-from fastapi_notification.utils.loading import ensure_loaded
 from fastapi_notification.utils.username import get_username
 
 
@@ -21,9 +21,8 @@ class DeletedNotification(Base):
 
     Attributes:
         notification_id (int): The notification that was soft deleted.
-        user_id (int): The user who deleted it.
+        user_id (str): The host user identifier who deleted it.
         deleted_at (datetime): When the notification was deleted.
-
     """
 
     __tablename__ = "deleted_notifications"
@@ -38,9 +37,7 @@ class DeletedNotification(Base):
     notification_id: Mapped[int] = mapped_column(
         ForeignKey("notification.id", ondelete="CASCADE"), nullable=False
     )
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     deleted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -50,12 +47,15 @@ class DeletedNotification(Base):
 
         Returns:
             str: A representation naming the notification and the deleting user.
-
         """
         user = getattr(self, "user", None)
         notification = getattr(self, "notification", None)
         username = get_username(user) if user is not None else "Unknown"
-        user_id = user.id if user is not None else self.user_id
+        user_id = (
+            get_identity_adapter().get_user_id(user)
+            if user is not None
+            else self.user_id
+        )
         return f"{notification} deleted by {username} (ID: {user_id})"
 
     @classmethod
@@ -81,15 +81,14 @@ class DeletedNotification(Base):
         Raises:
             PermissionError: If the user is not allowed to delete the
                 notification.
-
         """
-        await ensure_loaded(session, notification, "recipient", "group")
-        await ensure_loaded(session, user, "groups")
-        NotificationPermission(notification).validate_permission(user, "delete")
+        await NotificationPermission(notification).validate_permission_async(
+            session, user, "delete"
+        )
 
         instance = cls(
             notification_id=notification.id,
-            user_id=user.id,
+            user_id=get_identity_adapter().get_user_id(user),
             deleted_at=deleted_at or utcnow(),
         )
         session.add(instance)

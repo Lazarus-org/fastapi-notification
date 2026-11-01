@@ -16,7 +16,7 @@ async def test_create_records_the_deletion(
     await session.commit()
 
     assert deleted.notification_id == notification.id
-    assert deleted.user_id == user.id
+    assert deleted.user_id == str(user.id)
     assert deleted.deleted_at is not None
 
 
@@ -35,7 +35,7 @@ async def test_create_allows_staff(
     deleted = await DeletedNotification.create(session, notification, staff_user)
     await session.commit()
 
-    assert deleted.user_id == staff_user.id
+    assert deleted.user_id == str(staff_user.id)
 
 
 async def test_str_falls_back_when_relationships_are_absent(

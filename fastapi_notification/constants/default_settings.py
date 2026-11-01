@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from fastapi_notification.utils.user_model import REQUIRED_FIELDS, USERNAME_FIELD
-
 
 @dataclass(frozen=True)
 class DefaultSerializerSettings:
@@ -10,9 +8,7 @@ class DefaultSerializerSettings:
         default_factory=lambda: ["id", "description", "status", "link", "timestamp"]
     )
     notification_serializer_class: Optional[str] = None
-    user_serializer_fields: List[str] = field(
-        default_factory=lambda: [USERNAME_FIELD] + list(REQUIRED_FIELDS)
-    )
+    user_serializer_fields: List[str] = field(default_factory=lambda: ["id"])
     user_serializer_class: Optional[str] = None
     group_serializer_class: Optional[str] = None
 
@@ -43,6 +39,7 @@ class DefaultPaginationAndFilteringSettings:
 # pylint: disable=too-many-instance-attributes
 @dataclass(frozen=True)
 class DefaultAPISettings:
+    identity_adapter: str = "fastapi_notification.identity.IdentityAdapter"
     include_soft_delete: bool = True
     include_hard_delete: bool = False
     allow_list: bool = True

@@ -22,10 +22,7 @@ pytestmark = [pytest.mark.api, pytest.mark.api_schemas]
 
 async def test_user_serializer_uses_the_configured_fields(user: User) -> None:
     """A user is rendered with exactly the configured fields."""
-    assert UserSerializer.to_representation(user) == {
-        "username": "ann",
-        "email": "ann@example.com",
-    }
+    assert UserSerializer.to_representation(user) == {"id": user.id}
 
 
 async def test_user_serializer_honours_a_narrowed_field_list(user: User) -> None:
@@ -82,7 +79,7 @@ async def test_notification_serializer_expands_related_objects(
 
     assert data["id"] == notification.id
     assert data["verb"] == "liked your post"
-    assert data["recipient"] == [{"username": "ann", "email": "ann@example.com"}]
+    assert data["recipient"] == [{"id": user.id}]
     assert data["actor_content_type"] == "auth.user"
     assert data["target_content_type"] is None
     assert data["title"].startswith("ann liked your post")
@@ -193,9 +190,7 @@ def test_configured_helper_classes_are_used() -> None:
         USER_SERIALIZER_CLASS=(
             "fastapi_notification.api.schemas.group.PermissionSerializer"
         ),
-        GROUP_SERIALIZER_CLASS=(
-            "fastapi_notification.api.schemas.user.UserSerializer"
-        ),
+        GROUP_SERIALIZER_CLASS=("fastapi_notification.api.schemas.user.UserSerializer"),
     )
 
     assert user_serializer_class() is PermissionSerializer

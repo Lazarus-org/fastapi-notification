@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,7 @@ from fastapi_notification.constants.qs_types import (
     Rows,
     Target,
 )
-from fastapi_notification.models.auth import User
+from fastapi_notification.identity import hydrate_notification_identities
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.repository.queryset import notification as queryset
 
@@ -46,7 +46,6 @@ class NotificationDataAccessLayer:
         mark_all_as_seen: Marks all unseen notifications for a user as seen.
         deleted: Retrieves all deleted notifications, optionally filtered by user.
         clear_all: Clears all seen notifications for a user, marking them deleted.
-
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -58,7 +57,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             NotificationQuerySet: The statement builder.
-
         """
         return self.query_set
 
@@ -73,9 +71,11 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The resulting rows.
-
         """
-        return await queryset.fetch(self.session, statement, display_detail)
+        rows = await queryset.fetch(self.session, statement, display_detail)
+        if display_detail:
+            await hydrate_notification_identities(self.session, rows)
+        return rows
 
     # ------------------------------------------------------------------
     # Statement builders
@@ -96,7 +96,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.all_notifications(recipients, groups, display_detail)
 
@@ -120,7 +119,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.sent(
             recipients, exclude_deleted_by, groups, display_detail, conditions
@@ -146,7 +144,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.unsent(
             recipients, exclude_deleted_by, groups, display_detail, conditions
@@ -154,7 +151,7 @@ class NotificationDataAccessLayer:
 
     def seen_statement(
         self,
-        seen_by: User,
+        seen_by: Any,
         recipients: Recipients = None,
         groups: Groups = None,
         display_detail: bool = False,
@@ -163,7 +160,7 @@ class NotificationDataAccessLayer:
         """Build the statement returning notifications a user has seen.
 
         Args:
-            seen_by (User): The user who has seen the notifications.
+            seen_by (Any): The user who has seen the notifications.
             recipients (Recipients): The recipients of the notifications.
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are selected.
@@ -171,7 +168,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.seen(
             seen_by, recipients, groups, display_detail, conditions
@@ -179,7 +175,7 @@ class NotificationDataAccessLayer:
 
     def unseen_statement(
         self,
-        unseen_by: User,
+        unseen_by: Any,
         recipients: Recipients = None,
         groups: Groups = None,
         display_detail: bool = False,
@@ -188,7 +184,7 @@ class NotificationDataAccessLayer:
         """Build the statement returning notifications a user has not seen.
 
         Args:
-            unseen_by (User): The user who has not seen the notifications.
+            unseen_by (Any): The user who has not seen the notifications.
             recipients (Recipients): The recipients of the notifications.
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are selected.
@@ -196,7 +192,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.unseen(
             unseen_by, recipients, groups, display_detail, conditions
@@ -213,7 +208,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.deleted(deleted_by, display_detail)
 
@@ -240,7 +234,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.all_notifications_statement(recipients, groups, display_detail),
@@ -267,7 +260,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.sent_statement(
@@ -296,7 +288,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.unsent_statement(
@@ -307,7 +298,7 @@ class NotificationDataAccessLayer:
 
     async def seen(
         self,
-        seen_by: User,
+        seen_by: Any,
         recipients: Recipients = None,
         groups: Groups = None,
         display_detail: bool = False,
@@ -316,7 +307,7 @@ class NotificationDataAccessLayer:
         """Return all notifications the given user has seen.
 
         Args:
-            seen_by (User): The user who has seen the notifications.
+            seen_by (Any): The user who has seen the notifications.
             recipients (Recipients): The recipients of the notifications.
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are returned.
@@ -324,7 +315,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.seen_statement(
@@ -335,7 +325,7 @@ class NotificationDataAccessLayer:
 
     async def unseen(
         self,
-        unseen_by: User,
+        unseen_by: Any,
         recipients: Recipients = None,
         groups: Groups = None,
         display_detail: bool = False,
@@ -344,7 +334,7 @@ class NotificationDataAccessLayer:
         """Return all notifications the given user has not seen.
 
         Args:
-            unseen_by (User): The user who has not seen the notifications.
+            unseen_by (Any): The user who has not seen the notifications.
             recipients (Recipients): The recipients of the notifications.
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are returned.
@@ -352,7 +342,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.unseen_statement(
@@ -372,7 +361,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.deleted_statement(deleted_by, display_detail), display_detail
@@ -389,11 +377,13 @@ class NotificationDataAccessLayer:
 
         Returns:
             Optional[Notification]: The notification, or ``None``.
-
         """
-        return await queryset.get_notification(
+        notification = await queryset.get_notification(
             self.session, statement, notification_id
         )
+        if notification is not None:
+            await hydrate_notification_identities(self.session, [notification])
+        return notification
 
     async def count(self, statement: Select) -> int:
         """Return how many rows a statement would produce.
@@ -403,7 +393,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             int: The number of matching rows.
-
         """
         return await queryset.count(self.session, statement)
 
@@ -445,7 +434,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Notification: The created notification instance.
-
         """
         notification = await queryset.create_notification(
             self.session,
@@ -486,7 +474,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Notification: The updated notification instance.
-
         """
         return await queryset.update_notification(
             self.session, notification_id, is_sent, public, data
@@ -506,7 +493,6 @@ class NotificationDataAccessLayer:
                 delete. Required for soft deletes.
             soft_delete (bool): Whether to perform a soft delete. Defaults to
                 True.
-
         """
         await queryset.delete_notification(
             self.session, notification_id, recipient, soft_delete
@@ -520,7 +506,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             int: The number of notifications deleted.
-
         """
         return await queryset.delete_many(self.session, statement)
 
@@ -537,27 +522,24 @@ class NotificationDataAccessLayer:
 
         Returns:
             int: The number of notifications marked as sent.
-
         """
         return await queryset.mark_all_as_sent(self.session, recipients, groups)
 
-    async def mark_all_as_seen(self, user: User) -> int:
+    async def mark_all_as_seen(self, user: Any) -> int:
         """Mark all unseen notifications for a user as seen.
 
         Args:
-            user (User): The user to mark notifications as seen for.
+            user (Any): The user to mark notifications as seen for.
 
         Returns:
             int: The number of notifications marked as seen.
-
         """
         return await queryset.mark_all_as_seen(self.session, user)
 
-    async def clear_all(self, user: User) -> None:
+    async def clear_all(self, user: Any) -> None:
         """Soft delete every notification the given user has already seen.
 
         Args:
-            user (User): The user whose notifications should be cleared.
-
+            user (Any): The user whose notifications should be cleared.
         """
         await queryset.clear_all(self.session, user)

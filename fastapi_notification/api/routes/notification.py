@@ -12,6 +12,7 @@ from fastapi_notification.api.dependencies.db import get_session
 from fastapi_notification.api.filters.notification_filter import NotificationFilter
 from fastapi_notification.api.routes.base import BaseNotificationRoutes
 from fastapi_notification.api.schemas.notification import NotificationSerializer
+from fastapi_notification.identity import get_identity_adapter
 
 
 class NotificationRoutes(BaseNotificationRoutes):
@@ -37,7 +38,6 @@ class NotificationRoutes(BaseNotificationRoutes):
     Permissions:
     - Only authenticated users may interact with notifications.
     - Staff users see every sent notification, with full details.
-
     """
 
     async def get_statement(
@@ -58,11 +58,10 @@ class NotificationRoutes(BaseNotificationRoutes):
 
         Returns:
             Select: The statement.
-
         """
         dal = self.get_dal(session)
 
-        if getattr(user, "is_staff", False):
+        if get_identity_adapter().is_staff(user):
             return dal.unseen_statement(unseen_by=user, display_detail=True)
 
         groups = await self.get_user_groups(session, user)
@@ -97,7 +96,6 @@ def create_notification_router(
 
     Returns:
         APIRouter: The configured router.
-
     """
     from fastapi_notification.settings.checks import run_checks
 
@@ -134,7 +132,6 @@ def create_notification_router(
 
             Returns:
                 Dict[str, Any]: The paginated notifications.
-
             """
             return await routes.list_notifications(request, session, user, filterset)
 
@@ -151,7 +148,6 @@ def create_notification_router(
 
         Returns:
             Dict[str, str]: How many notifications were marked as seen.
-
         """
         count = await routes.get_dal(session).mark_all_as_seen(user)
         await session.commit()
@@ -181,14 +177,11 @@ def create_notification_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist or is not visible to the user.
-
             """
             statement = await routes.get_statement(session, user, display_detail=True)
             statement = filterset.filter_queryset(statement)
 
-            notification = await routes.get_dal(session).get(
-                statement, notification_id
-            )
+            notification = await routes.get_dal(session).get(statement, notification_id)
 
             if notification is None:
                 raise HTTPException(

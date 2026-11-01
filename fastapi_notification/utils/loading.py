@@ -17,7 +17,6 @@ def loaded_collection(instance: Any, name: str) -> Any:
 
     Returns:
         Any: The loaded contents, or an empty list.
-
     """
     if instance is None:
         return []
@@ -45,12 +44,13 @@ async def ensure_loaded(session: AsyncSession, instance: Any, *attributes: str) 
 
     Returns:
         Any: The same instance, with the requested attributes loaded.
-
     """
     if instance is None:
         return instance
 
-    state = inspect(instance)
+    state = inspect(instance, raiseerr=False)
+    if state is None:
+        return instance
 
     if state.transient or state.detached:
         return instance

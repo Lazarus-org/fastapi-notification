@@ -1,11 +1,10 @@
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from fastapi_notification.models.auth import Group, User
-
-# Type aliases used across the data access layer.
-Recipient = Optional[User]
-Recipients = Optional[Union[User, Sequence[User]]]
-Groups = Optional[Union[Group, Sequence[Group]]]
+# Identity objects belong to the host application. The package only relies on
+# the configured IdentityAdapter to extract their identifiers.
+Recipient = Optional[Any]
+Recipients = Optional[Union[Any, Sequence[Any]]]
+Groups = Optional[Union[Any, Sequence[Any]]]
 OptConditions = Optional[Sequence[Any]]
 Link = Optional[str]
 Actor = Any

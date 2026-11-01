@@ -1,5 +1,5 @@
 from .auth import Group, Permission, User, group_permission, user_group
-from .base import Base, utcnow
+from .base import AuthBase, Base, utcnow
 from .content_type import (
     ContentType,
     get_registered_model,
@@ -14,6 +14,7 @@ from .notification_seen import NotificationSeen
 from .permissions.notification_permission import NotificationPermission
 
 __all__ = [
+    "AuthBase",
     "Base",
     "ContentType",
     "DeletedNotification",

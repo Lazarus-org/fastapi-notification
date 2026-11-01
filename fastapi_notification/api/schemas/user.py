@@ -14,7 +14,6 @@ def build_user_serializer() -> Type[BaseSerializer]:
 
     Returns:
         Type[BaseSerializer]: A serializer exposing the configured fields.
-
     """
     fields: Dict[str, Tuple[Any, Any]] = {
         name: (Optional[Any], None) for name in config.user_serializer_fields
@@ -33,10 +32,9 @@ class UserSerializer(BaseSerializer):
     Declared for import stability and OpenAPI discovery; the fields actually
     served are resolved at request time by :func:`build_user_serializer`, since
     they are configurable.
-
     """
 
-    id: Optional[int] = None
+    id: Optional[Any] = None
     username: Optional[str] = None
     email: Optional[str] = None
 
@@ -49,6 +47,5 @@ class UserSerializer(BaseSerializer):
 
         Returns:
             Dict[str, Any]: The serialized user.
-
         """
         return build_user_serializer().to_representation(instance)

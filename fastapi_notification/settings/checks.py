@@ -1,5 +1,6 @@
 from typing import Any, List
 
+from fastapi_notification.identity import get_identity_adapter
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.settings.conf import config
 from fastapi_notification.utils.get_model_fields import get_serializable_model_fields
@@ -18,15 +19,12 @@ class ImproperlyConfigured(Exception):
     Attributes:
         errors (List[Error]): Every problem found, so they can be fixed in one
             pass rather than one at a time.
-
     """
 
     def __init__(self, errors: List[Error]) -> None:
         self.errors = errors
         joined = "\n".join(f"  - {error}" for error in errors)
-        super().__init__(
-            f"fastapi-notification is improperly configured:\n{joined}"
-        )
+        super().__init__(f"fastapi-notification is improperly configured:\n{joined}")
 
 
 # pylint: disable=too-many-statements
@@ -38,9 +36,43 @@ def check_notification_settings(**kwargs: Any) -> List[Error]:
 
     Returns:
         List[Error]: A list of errors for any detected configuration issues.
-
     """
     errors: List[Error] = []
+
+    identity_setting_name = f"{config.prefix}IDENTITY_ADAPTER"
+    identity_setting_value = config.get_setting(identity_setting_name, None)
+    if (
+        isinstance(identity_setting_value, (str, type))
+        or identity_setting_value is None
+    ):
+        errors.extend(
+            validate_optional_class_setting(
+                identity_setting_value, identity_setting_name
+            )
+        )
+
+    if config.identity_adapter is None:
+        errors.append(
+            Error(
+                "The identity adapter is not configured.",
+                hint=(
+                    "Set IDENTITY_ADAPTER to an IdentityAdapter class or an "
+                    "importable class path."
+                ),
+                id=f"fastapi_notification.E015_{config.prefix}IDENTITY_ADAPTER",
+            )
+        )
+    else:
+        try:
+            get_identity_adapter()
+        except Exception as error:
+            errors.append(
+                Error(
+                    f"The configured identity adapter is invalid: {error}",
+                    hint="Configure a class implementing the IdentityAdapter contract.",
+                    id=f"fastapi_notification.E016_{config.prefix}IDENTITY_ADAPTER",
+                )
+            )
 
     errors.extend(
         validate_boolean_setting(
@@ -79,8 +111,7 @@ def check_notification_settings(**kwargs: Any) -> List[Error]:
         validate_list_fields(
             config.notification_serializer_fields,
             f"{config.prefix}SERIALIZER_FIELDS",
-            available_fields=["title"]
-            + get_serializable_model_fields(Notification),
+            available_fields=["title"] + get_serializable_model_fields(Notification),
             allow_none=True,
         )
     )
@@ -140,7 +171,6 @@ def run_checks() -> None:
 
     Raises:
         ImproperlyConfigured: If any setting fails validation.
-
     """
     errors = check_notification_settings()
     if errors:

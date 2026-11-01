@@ -5,10 +5,13 @@ The API serves the same endpoints to everyone, but what those endpoints return
 depends on who is asking. Three roles matter: the ordinary authenticated user,
 the staff user, and the superuser.
 
-A role is read from the user object your current-user dependency returns. The
-package looks at two flags, ``is_staff`` and ``is_superuser``, and at the
-user's ``groups`` collection. Any object carrying those attributes works; the
-packaged :class:`~fastapi_notification.models.auth.User` model provides them.
+A role is resolved by the configured :class:`~fastapi_notification.identity.IdentityAdapter`
+from the user object returned by your current-user dependency. The default
+adapter reads ``is_staff``, ``is_superuser`` and ``groups``. Configure a custom
+adapter when your application uses different attribute names or stores group
+membership separately. The optional packaged
+:class:`~fastapi_notification.models.auth.User` model provides the conventional
+attributes.
 
 
 Authenticated User

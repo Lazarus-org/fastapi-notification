@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import (
 
 from fastapi_notification.api.throttlings.role_base_throttle import history
 from fastapi_notification.models.auth import Group, User
-from fastapi_notification.models.base import Base
+from fastapi_notification.models.base import AuthBase, Base
 from fastapi_notification.repository.manager.notification import (
     NotificationDataAccessLayer,
 )
@@ -29,7 +29,6 @@ def clean_settings() -> Iterator[None]:
 
     Yields:
         None: Control, while the settings are clean.
-
     """
     reset_config()
     history.clear()
@@ -44,12 +43,12 @@ async def engine() -> AsyncIterator[AsyncEngine]:
 
     Yields:
         AsyncEngine: The engine backing the test database.
-
     """
     test_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
 
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+        await connection.run_sync(AuthBase.metadata.create_all)
 
     yield test_engine
 
@@ -65,7 +64,6 @@ def session_factory(engine: AsyncEngine) -> async_sessionmaker:
 
     Returns:
         async_sessionmaker: The session factory.
-
     """
     return async_sessionmaker(engine, expire_on_commit=False)
 
@@ -76,7 +74,6 @@ async def session(session_factory: async_sessionmaker) -> AsyncIterator[AsyncSes
 
     Yields:
         AsyncSession: The session.
-
     """
     async with session_factory() as test_session:
         yield test_session
@@ -91,7 +88,6 @@ def dal(session: AsyncSession) -> NotificationDataAccessLayer:
 
     Returns:
         NotificationDataAccessLayer: The data access layer.
-
     """
     return NotificationDataAccessLayer(session)
 
@@ -102,7 +98,6 @@ def current_user() -> Dict[str, Optional[int]]:
 
     Returns:
         Dict[str, Optional[int]]: The mutable holder.
-
     """
     return {"id": None}
 
@@ -116,7 +111,6 @@ async def group(session: AsyncSession) -> Group:
 
     Returns:
         Group: The persisted group.
-
     """
     instance = Group(name="admins")
     session.add(instance)
@@ -134,7 +128,6 @@ async def user(session: AsyncSession) -> User:
 
     Returns:
         User: The persisted user.
-
     """
     instance = User(username="ann", email="ann@example.com")
     session.add(instance)
@@ -152,7 +145,6 @@ async def other_user(session: AsyncSession) -> User:
 
     Returns:
         User: The persisted user.
-
     """
     instance = User(username="bob", email="bob@example.com")
     session.add(instance)
@@ -171,7 +163,6 @@ async def group_user(session: AsyncSession, group: Group) -> User:
 
     Returns:
         User: The persisted user.
-
     """
     instance = User(username="gil", email="gil@example.com", groups=[group])
     session.add(instance)
@@ -189,7 +180,6 @@ async def staff_user(session: AsyncSession) -> User:
 
     Returns:
         User: The persisted user.
-
     """
     instance = User(username="sue", email="sue@example.com", is_staff=True)
     session.add(instance)
@@ -207,7 +197,6 @@ async def superuser(session: AsyncSession) -> User:
 
     Returns:
         User: The persisted user.
-
     """
     instance = User(
         username="root", email="root@example.com", is_staff=True, is_superuser=True
@@ -219,7 +208,9 @@ async def superuser(session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def notification(dal: NotificationDataAccessLayer, user: User, session: AsyncSession) -> Any:
+async def notification(
+    dal: NotificationDataAccessLayer, user: User, session: AsyncSession
+) -> Any:
     """Create a sent notification addressed to the regular user.
 
     Args:
@@ -229,7 +220,6 @@ async def notification(dal: NotificationDataAccessLayer, user: User, session: As
 
     Returns:
         Any: The persisted notification.
-
     """
     instance = await dal.create_notification(
         verb="liked your post", actor=user, recipients=user, is_sent=True
@@ -252,7 +242,6 @@ async def notifications(
 
     Returns:
         List[Any]: The persisted notifications.
-
     """
     created = [
         await dal.create_notification(
@@ -280,7 +269,6 @@ def app_factory(
 
     Returns:
         Callable[..., Any]: The application factory.
-
     """
 
     def factory(**settings: Any) -> Any:
@@ -300,7 +288,6 @@ def client_factory(app_factory: Callable[..., Any]) -> Callable[..., AsyncClient
 
     Returns:
         Callable[..., AsyncClient]: The client factory.
-
     """
 
     def factory(**settings: Any) -> AsyncClient:
@@ -320,7 +307,6 @@ async def client(
 
     Yields:
         AsyncClient: The client.
-
     """
     async with client_factory() as test_client:
         yield test_client
@@ -335,7 +321,6 @@ def as_user(current_user: Dict[str, Optional[int]]) -> Callable[[Any], None]:
 
     Returns:
         Callable[[Any], None]: The helper.
-
     """
 
     def switch(target: Any) -> None:

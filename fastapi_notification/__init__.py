@@ -1,14 +1,19 @@
 """fastapi-notification.
 
-A FastAPI package developed by Lazarus for efficiently handling
-notifications through various APIs.
-
+A FastAPI package developed by Lazarus for efficiently handling notifications through
+various APIs.
 """
 
 from fastapi_notification.api.routers.notification import create_router
 from fastapi_notification.api.routes.activity import create_activity_router
 from fastapi_notification.api.routes.notification import create_notification_router
+from fastapi_notification.identity import (
+    BuiltInIdentityAdapter,
+    IdentityAdapter,
+    IdentityReference,
+)
 from fastapi_notification.models import (
+    AuthBase,
     Base,
     ContentType,
     DeletedNotification,
@@ -29,7 +34,11 @@ from fastapi_notification.settings.conf import config, configure, reset_config
 __version__ = "1.0.0"
 
 __all__ = [
+    "AuthBase",
     "Base",
+    "BuiltInIdentityAdapter",
+    "IdentityAdapter",
+    "IdentityReference",
     "ContentType",
     "DeletedNotification",
     "Group",

@@ -47,12 +47,12 @@ def test_any_iterable_is_normalized(user: User, other_user: User) -> None:
 
 def test_ids_reads_primary_keys(user: User, other_user: User) -> None:
     """Instances are reduced to their primary keys."""
-    assert _ids([user, other_user]) == [user.id, other_user.id]
+    assert _ids([user, other_user]) == [str(user.id), str(other_user.id)]
 
 
 def test_ids_passes_raw_integers_through() -> None:
     """Primary keys may be given directly."""
-    assert _ids([1, 2]) == [1, 2]
+    assert _ids([1, 2]) == ["1", "2"]
 
 
 async def test_adding_no_groups_is_a_no_op(
