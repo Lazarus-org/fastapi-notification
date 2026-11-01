@@ -30,6 +30,7 @@ from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
+from fastapi_notification.models.state import insert_if_absent
 from fastapi_notification.utils.loading import ensure_loaded
 from fastapi_notification.utils.naturaltime import naturaltime
 
@@ -340,17 +341,16 @@ class Notification(Base):
         )
 
         user_id = get_identity_adapter().get_user_id(user)
-        existing = await session.execute(
-            select(NotificationSeen.id).where(
-                NotificationSeen.notification_id == self.id,
-                NotificationSeen.user_id == user_id,
-            )
+        await insert_if_absent(
+            session,
+            NotificationSeen,
+            {"notification_id": self.id, "user_id": user_id},
+            ("notification_id", "user_id"),
         )
-        if existing.scalar_one_or_none() is not None:
-            return
-
-        session.add(NotificationSeen(notification_id=self.id, user_id=user_id))
-        await session.flush()
         current_seen = list(self.seen_by)
-        current_seen.append(user)
-        self.seen_by = current_seen
+        if not any(
+            get_identity_adapter().get_user_id(identity) == user_id
+            for identity in current_seen
+        ):
+            current_seen.append(user)
+            self.seen_by = current_seen

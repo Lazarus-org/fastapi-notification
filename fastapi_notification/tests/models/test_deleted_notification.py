@@ -65,3 +65,17 @@ async def test_str_uses_loaded_relationships(
     deleted.notification = notification
 
     assert "deleted by ann" in str(deleted)
+
+
+async def test_create_is_idempotent_for_repeated_requests(
+    notification: Notification, user: User, session: AsyncSession
+) -> None:
+    """Repeated soft deletion returns the existing unique row."""
+    first = await DeletedNotification.create(session, notification, user)
+    second = await DeletedNotification.create(session, notification, user)
+    await session.commit()
+
+    assert first.id == second.id
+    assert first.notification_id == second.notification_id
+    assert first.user_id == second.user_id
+    assert first.deleted_at == second.deleted_at

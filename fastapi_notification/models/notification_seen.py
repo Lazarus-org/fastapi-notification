@@ -10,6 +10,7 @@ from fastapi_notification.models.base import Base, utcnow
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
+from fastapi_notification.models.state import insert_if_absent
 from fastapi_notification.utils.username import get_username
 
 
@@ -88,11 +89,14 @@ class NotificationSeen(Base):
             session, user, "mark as seen"
         )
 
-        instance = cls(
-            notification_id=notification.id,
-            user_id=get_identity_adapter().get_user_id(user),
-            seen_at=seen_at or utcnow(),
+        instance, _ = await insert_if_absent(
+            session,
+            cls,
+            {
+                "notification_id": notification.id,
+                "user_id": get_identity_adapter().get_user_id(user),
+                "seen_at": seen_at or utcnow(),
+            },
+            ("notification_id", "user_id"),
         )
-        session.add(instance)
-        await session.flush()
         return instance

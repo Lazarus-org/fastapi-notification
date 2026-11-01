@@ -481,3 +481,13 @@ The test suite runs at 100% coverage and the build enforces it.
 # License
 
 This project is licensed under the MIT License — see the [LICENCE](LICENCE) file for details.
+
+
+## Concurrency and transactions
+
+Per-user seen and soft-deletion transitions are idempotent and protected by
+database uniqueness constraints. SQLite and PostgreSQL use atomic conflict-safe
+inserts for single and bulk operations; other SQLAlchemy dialects use savepoint
+fallbacks. The package flushes but never commits the host application's
+session. The host application owns transaction commit and rollback. See the
+[concurrency guide](docs/concurrency.rst) for details.

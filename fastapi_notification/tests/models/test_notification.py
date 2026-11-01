@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_notification.models.auth import Group, User
 from fastapi_notification.models.notification import Notification
+from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.repository.manager.notification import (
     NotificationDataAccessLayer,
 )
@@ -194,3 +195,18 @@ async def test_to_dict_exposes_the_mapped_columns(
     assert data["id"] == notification.id
     assert data["verb"] == "liked your post"
     assert "recipient" not in data
+
+
+async def test_mark_as_seen_refreshes_projection_when_record_already_exists(
+    notification: Notification, user: User, session: AsyncSession
+) -> None:
+    """An idempotent retry still updates the in-memory seen-by projection."""
+    session.add(
+        NotificationSeen(notification_id=notification.id, user_id=str(user.id))
+    )
+    await session.flush()
+
+    notification.seen_by = []
+    await notification.mark_as_seen(session, user)
+
+    assert [identity.id for identity in notification.seen_by] == [user.id]

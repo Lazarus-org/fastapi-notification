@@ -6,6 +6,7 @@ from sqlalchemy import (
     delete,
     func,
     insert,
+    literal,
     or_,
     select,
     update,
@@ -35,6 +36,7 @@ from fastapi_notification.models.deleted_notification import DeletedNotification
 from fastapi_notification.models.notification import Notification, notification_group
 from fastapi_notification.models.notification_recipient import NotificationRecipient
 from fastapi_notification.models.notification_seen import NotificationSeen
+from fastapi_notification.models.state import insert_many_from_select_if_absent
 
 
 def _as_sequence(value: Any) -> Sequence[Any]:
@@ -637,20 +639,19 @@ async def mark_all_as_seen(session: AsyncSession, user: Any) -> int:
         groups=group_ids,
         display_detail=True,
     )
-    notifications = await fetch(session, statement, display_detail=True)
-
-    session.add_all(
-        [
-            NotificationSeen(
-                notification_id=notification.id,
-                user_id=get_identity_adapter().get_user_id(user),
-            )
-            for notification in notifications
-        ]
+    candidate_ids = (
+        statement.with_only_columns(Notification.id).order_by(None).subquery()
     )
-    await session.flush()
-
-    return len(notifications)
+    source = select(
+        candidate_ids.c.id, literal(get_identity_adapter().get_user_id(user))
+    )
+    return await insert_many_from_select_if_absent(
+        session,
+        NotificationSeen,
+        ("notification_id", "user_id"),
+        source,
+        ("notification_id", "user_id"),
+    )
 
 
 async def mark_all_as_sent(
@@ -705,18 +706,19 @@ async def clear_all(session: AsyncSession, user: Any) -> None:
         groups=group_ids,
         display_detail=True,
     )
-    notifications = await fetch(session, statement, display_detail=True)
-
-    session.add_all(
-        [
-            DeletedNotification(
-                notification_id=notification.id,
-                user_id=get_identity_adapter().get_user_id(user),
-            )
-            for notification in notifications
-        ]
+    candidate_ids = (
+        statement.with_only_columns(Notification.id).order_by(None).subquery()
     )
-    await session.flush()
+    source = select(
+        candidate_ids.c.id, literal(get_identity_adapter().get_user_id(user))
+    )
+    await insert_many_from_select_if_absent(
+        session,
+        DeletedNotification,
+        ("notification_id", "user_id"),
+        source,
+        ("user_id", "notification_id"),
+    )
 
 
 async def delete_many(session: AsyncSession, statement: Select) -> int:

@@ -75,3 +75,17 @@ async def test_str_uses_loaded_relationships(
 
     assert str(seen).startswith("ann (ID:")
     assert "liked your post" in str(seen)
+
+
+async def test_create_is_idempotent_for_concurrent_retries(
+    notification: Notification, user: User, session: AsyncSession
+) -> None:
+    """Repeated state creation returns the existing unique row."""
+    first = await NotificationSeen.create(session, notification, user)
+    second = await NotificationSeen.create(session, notification, user)
+    await session.commit()
+
+    assert first.id == second.id
+    assert first.notification_id == second.notification_id
+    assert first.user_id == second.user_id
+    assert first.seen_at == second.seen_at
