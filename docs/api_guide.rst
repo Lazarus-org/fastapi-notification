@@ -73,7 +73,7 @@ Method  Path                                             Description
 ======  ===============================================  =========================================
 GET     ``/activities/``                                 List the notifications you have seen.
 GET     ``/activities/clear_activities/``                Soft-delete every activity.
-GET     ``/activities/delete_activities/``               Permanently delete every activity.
+GET     ``/activities/delete_activities/``               Staff-only global hard delete.
 GET     ``/activities/{notification_id}/``               Retrieve one activity.
 GET     ``/activities/{notification_id}/clear_notification/``   Soft-delete one activity.
 GET     ``/activities/{notification_id}/delete_notification/``  Permanently delete one activity.
@@ -82,7 +82,8 @@ GET     ``/activities/{notification_id}/delete_notification/``  Permanently dele
 Soft deletion records that *this* user cleared the notification. The row stays
 in the database and stays visible to its other recipients. Permanent deletion
 destroys the row for everyone, which is why it is restricted to staff and
-switched off by default.
+switched off by default. The bulk administrative route is intentionally global
+and does not use the staff user's personal activity listing.
 
 
 Example Responses
@@ -91,8 +92,8 @@ Example Responses
 List notifications with full details
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Staff users, and everyone when ``SERIALIZER_INCLUDE_FULL_DETAILS`` is on,
-receive the detailed representation:
+When ``SERIALIZER_INCLUDE_FULL_DETAILS`` is on, everyone receives the detailed
+representation. Staff and superuser roles do not reveal additional fields:
 
 .. code-block:: bash
 
@@ -303,7 +304,10 @@ returns ``None``, the response is ``401``:
    {"detail": "Authentication credentials were not provided."}
 
 The two permanent-deletion routes additionally require the user to be staff,
-and return ``403`` otherwise:
+and return ``403`` otherwise. This administrative permission is separate from
+personal notification visibility: staff and superusers still see only their
+own notifications and those addressed to their groups. A superuser who is not
+also staff does not satisfy the hard-delete guard.
 
 .. code-block:: json
 

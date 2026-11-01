@@ -169,15 +169,20 @@ async def test_mark_as_seen_allows_a_group_member(
     assert [seen.id for seen in created.seen_by] == [group_user.id]
 
 
-async def test_mark_as_seen_allows_staff(
+async def test_mark_as_seen_rejects_staff_without_audience_membership(
     notification: Notification, staff_user: User, session: AsyncSession
 ) -> None:
-    """Staff may mark any notification as seen."""
-    await notification.mark_as_seen(session, staff_user)
-    await session.commit()
-    await session.refresh(notification)
+    """Staff cannot mark another user's notification as seen."""
+    with pytest.raises(PermissionError, match="mark as seen"):
+        await notification.mark_as_seen(session, staff_user)
 
-    assert [seen.id for seen in notification.seen_by] == [staff_user.id]
+
+async def test_mark_as_seen_rejects_superuser_without_audience_membership(
+    notification: Notification, superuser_only: User, session: AsyncSession
+) -> None:
+    """Superuser status alone does not grant notification access."""
+    with pytest.raises(PermissionError, match="mark as seen"):
+        await notification.mark_as_seen(session, superuser_only)
 
 
 async def test_to_dict_exposes_the_mapped_columns(

@@ -32,6 +32,7 @@ class Permission(AuthBase):
     Attributes:
         name (str): The human readable description of the permission.
         codename (str): The machine readable identifier of the permission.
+
     """
 
     __tablename__ = "permissions"
@@ -46,6 +47,7 @@ class Permission(AuthBase):
 
         Returns:
             str: The human readable permission name.
+
         """
         return self.name
 
@@ -58,6 +60,7 @@ class Group(AuthBase):
         name (str): The unique name of the group.
         permissions (List[Permission]): The permissions granted by the group.
         users (List[User]): The members of the group.
+
     """
 
     __tablename__ = "groups"
@@ -78,6 +81,7 @@ class Group(AuthBase):
 
         Returns:
             str: The name of the group.
+
         """
         return self.name
 
@@ -97,6 +101,7 @@ class User(AuthBase):
         is_staff (bool): Whether the user has elevated, staff level access.
         is_superuser (bool): Whether the user bypasses every permission check.
         groups (List[Group]): The groups the user belongs to.
+
     """
 
     __tablename__ = "users"
@@ -123,5 +128,6 @@ class User(AuthBase):
 
         Returns:
             str: The username of the user.
+
         """
         return self.username

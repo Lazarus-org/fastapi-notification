@@ -1,7 +1,8 @@
 """fastapi-notification.
 
-A FastAPI package developed by Lazarus for efficiently handling notifications through
-various APIs.
+A FastAPI package developed by Lazarus for efficiently handling
+notifications through various APIs.
+
 """
 
 from fastapi_notification.api.routers.notification import create_router

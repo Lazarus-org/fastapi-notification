@@ -1,8 +1,8 @@
 """Identity integration for host application user and group models.
 
-The notification schema stores user and group identifiers as opaque strings. This module
-is the only boundary between those identifiers and the host application's authentication
-and authorization models.
+The notification schema stores user and group identifiers as opaque strings.
+This module is the only boundary between those identifiers and the host
+application's authentication and authorization models.
 """
 
 from __future__ import annotations
@@ -124,8 +124,8 @@ class IdentityAdapter:
     ) -> Mapping[str, Any]:
         """Resolve user identifiers for API representation.
 
-        Override this method to load the corresponding host user records. The base
-        implementation intentionally performs no database query.
+        Override this method to load the corresponding host user records. The
+        base implementation intentionally performs no database query.
         """
         del session
         return {
@@ -140,8 +140,8 @@ class IdentityAdapter:
     ) -> Mapping[str, Any]:
         """Resolve group identifiers for API representation.
 
-        Override this method to load the corresponding host group records. The base
-        implementation intentionally performs no database query.
+        Override this method to load the corresponding host group records. The
+        base implementation intentionally performs no database query.
         """
         del session
         return {
@@ -217,7 +217,9 @@ def get_identity_adapter() -> IdentityAdapter:
         "resolve_groups",
     )
     missing = [
-        name for name in required_methods if not callable(getattr(adapter, name, None))
+        name
+        for name in required_methods
+        if not callable(getattr(adapter, name, None))
     ]
     if missing:
         raise TypeError(
@@ -246,9 +248,9 @@ async def hydrate_notification_identities(
 ) -> None:
     """Populate recipient, group, and seen-by projections for notifications.
 
-    All association rows are fetched in batches, then the configured adapter resolves
-    identities. No ORM relationship to a package-owned auth table is involved in the
-    notification query itself.
+    All association rows are fetched in batches, then the configured adapter
+    resolves identities. No ORM relationship to a package-owned auth table is
+    involved in the notification query itself.
     """
     if not notifications:
         return
@@ -325,12 +327,16 @@ async def hydrate_notification_identities(
     for identifier in user_ids:
         users.setdefault(
             identifier,
-            IdentityReference(id=identifier, username=identifier, name=identifier),
+            IdentityReference(
+                id=identifier, username=identifier, name=identifier
+            ),
         )
     for identifier in group_ids:
         groups.setdefault(
             identifier,
-            IdentityReference(id=identifier, username=identifier, name=identifier),
+            IdentityReference(
+                id=identifier, username=identifier, name=identifier
+            ),
         )
 
     for notification in notifications:

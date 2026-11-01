@@ -19,12 +19,15 @@ class ImproperlyConfigured(Exception):
     Attributes:
         errors (List[Error]): Every problem found, so they can be fixed in one
             pass rather than one at a time.
+
     """
 
     def __init__(self, errors: List[Error]) -> None:
         self.errors = errors
         joined = "\n".join(f"  - {error}" for error in errors)
-        super().__init__(f"fastapi-notification is improperly configured:\n{joined}")
+        super().__init__(
+            f"fastapi-notification is improperly configured:\n{joined}"
+        )
 
 
 # pylint: disable=too-many-statements
@@ -36,15 +39,13 @@ def check_notification_settings(**kwargs: Any) -> List[Error]:
 
     Returns:
         List[Error]: A list of errors for any detected configuration issues.
+
     """
     errors: List[Error] = []
 
     identity_setting_name = f"{config.prefix}IDENTITY_ADAPTER"
     identity_setting_value = config.get_setting(identity_setting_name, None)
-    if (
-        isinstance(identity_setting_value, (str, type))
-        or identity_setting_value is None
-    ):
+    if isinstance(identity_setting_value, (str, type)) or identity_setting_value is None:
         errors.extend(
             validate_optional_class_setting(
                 identity_setting_value, identity_setting_name
@@ -111,7 +112,8 @@ def check_notification_settings(**kwargs: Any) -> List[Error]:
         validate_list_fields(
             config.notification_serializer_fields,
             f"{config.prefix}SERIALIZER_FIELDS",
-            available_fields=["title"] + get_serializable_model_fields(Notification),
+            available_fields=["title"]
+            + get_serializable_model_fields(Notification),
             allow_none=True,
         )
     )
@@ -171,6 +173,7 @@ def run_checks() -> None:
 
     Raises:
         ImproperlyConfigured: If any setting fails validation.
+
     """
     errors = check_notification_settings()
     if errors:

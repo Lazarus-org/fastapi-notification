@@ -186,22 +186,22 @@ async def test_mark_all_as_sent_can_target_a_group(
     assert await dal.mark_all_as_sent(groups=group) == 1
 
 
-async def test_staff_see_every_sent_notification(
+async def test_staff_only_see_notifications_addressed_to_them(
     dal: NotificationDataAccessLayer,
     notification: Notification,
     staff_user: User,
 ) -> None:
-    """Staff are not narrowed to notifications addressed to them."""
-    assert len(await dal.unseen(staff_user, display_detail=True)) == 1
+    """Staff status does not widen the personal notification audience."""
+    assert len(await dal.unseen(staff_user, display_detail=True)) == 0
 
 
-async def test_superusers_see_every_sent_notification(
+async def test_superusers_only_see_notifications_addressed_to_them(
     dal: NotificationDataAccessLayer,
     notification: Notification,
-    superuser: User,
+    superuser_only: User,
 ) -> None:
-    """Superusers are not narrowed either."""
-    assert len(await dal.unseen(superuser, display_detail=True)) == 1
+    """Superuser status does not widen the personal notification audience."""
+    assert len(await dal.unseen(superuser_only, display_detail=True)) == 0
 
 
 async def test_regular_users_only_see_their_own(
@@ -299,19 +299,40 @@ async def test_hard_delete_removes_the_row(
     assert await session.get(Notification, notification.id) is None
 
 
-async def test_staff_may_hard_delete_another_users_notification(
+async def test_staff_cannot_delete_another_users_notification_with_recipient_scope(
     dal: NotificationDataAccessLayer,
     notification: Notification,
     staff_user: User,
     session: AsyncSession,
 ) -> None:
-    """Staff are not narrowed when deleting."""
-    await dal.delete_notification(
-        notification.id, recipient=staff_user, soft_delete=False
+    """Passing a staff identity does not bypass recipient authorization."""
+    with pytest.raises(LookupError, match="No notification found"):
+        await dal.delete_notification(
+            notification.id, recipient=staff_user, soft_delete=False
+        )
+
+    await session.rollback()
+    assert await session.get(Notification, notification.id) is not None
+
+
+async def test_group_member_can_soft_delete_group_notification(
+    dal: NotificationDataAccessLayer,
+    user: User,
+    group: Group,
+    group_user: User,
+    session: AsyncSession,
+) -> None:
+    """Group audience membership permits clearing a group notification."""
+    notification = await dal.create_notification(
+        verb="group update", actor=user, groups=group, is_sent=True
     )
     await session.commit()
 
-    assert await session.get(Notification, notification.id) is None
+    await dal.delete_notification(notification.id, recipient=group_user)
+    await session.commit()
+
+    deleted = await dal.deleted(group_user, display_detail=True)
+    assert [item.id for item in deleted] == [notification.id]
 
 
 async def test_deleting_an_unknown_notification_is_reported(
@@ -448,7 +469,9 @@ async def test_deleted_notifications_are_excluded_from_listings(
 ) -> None:
     """A cleared notification stops appearing for the user who cleared it."""
     session.add(
-        DeletedNotification(notification_id=notification.id, user_id=str(user.id))
+        DeletedNotification(
+            notification_id=notification.id, user_id=str(user.id)
+        )
     )
     await session.commit()
 

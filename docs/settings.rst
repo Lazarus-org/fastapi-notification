@@ -153,8 +153,8 @@ SERIALIZER_INCLUDE_FULL_DETAILS
 Whether every response carries the full notification representation, including
 the resolved actor, target, action object, recipients and groups, rather than
 the summary fields. Turning this on also forces queries to select whole
-notification instances instead of summary columns. Staff users always receive
-full details regardless of this setting.
+notification instances instead of summary columns. Staff and superuser status
+does not override this setting.
 
 SERIALIZER_EXCLUDE_NULL_FIELDS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -200,8 +200,9 @@ SERIALIZER_CLASS
 **Type:** ``Optional[Type[Any]]`` (class or dotted path) — **Default:** ``None``
 
 A serializer class used for notifications in place of the packaged dynamic
-serializer. When unset, ``NotificationDynamicSerializer`` is used for ordinary
-users and ``NotificationSerializer`` for staff and when full details are on.
+serializer. When unset, ``NotificationDynamicSerializer`` is used unless
+``SERIALIZER_INCLUDE_FULL_DETAILS`` is enabled, in which case
+``NotificationSerializer`` is used. Role flags do not affect serializer choice.
 Setting it also forces queries to select whole notification instances.
 
 USER_SERIALIZER_FIELDS

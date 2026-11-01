@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_notification.models.auth import User
 from fastapi_notification.models.notification import Notification
+from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.repository.manager.notification import (
     NotificationDataAccessLayer,
 )
@@ -62,21 +63,67 @@ async def test_list_excludes_unseen_notifications(
     assert (await client.get("/activities/")).json()["count"] == 0
 
 
-async def test_list_serves_full_details_to_staff(
+async def test_staff_cannot_list_another_users_activity_even_with_legacy_seen_row(
     client: AsyncClient,
-    dal: NotificationDataAccessLayer,
     notification: Notification,
     staff_user: User,
     session: AsyncSession,
     as_user: Callable[[Any], None],
 ) -> None:
-    """Staff get the detailed representation."""
-    await mark_seen(dal, staff_user, session)
+    """A legacy seen record does not bypass the notification audience."""
+    session.add(
+        NotificationSeen(
+            notification_id=notification.id, user_id=str(staff_user.id)
+        )
+    )
+    await session.commit()
     as_user(staff_user)
 
-    result = (await client.get("/activities/")).json()["results"][0]
+    response = await client.get("/activities/")
 
-    assert "recipient" in result
+    assert response.status_code == 200
+    assert response.json()["count"] == 0
+
+
+async def test_superuser_cannot_list_another_users_activity_even_with_legacy_seen_row(
+    client: AsyncClient,
+    notification: Notification,
+    superuser_only: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """A superuser's legacy seen row does not widen personal activity access."""
+    session.add(
+        NotificationSeen(
+            notification_id=notification.id, user_id=str(superuser_only.id)
+        )
+    )
+    await session.commit()
+    as_user(superuser_only)
+
+    response = await client.get("/activities/")
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 0
+
+
+async def test_staff_cannot_retrieve_another_users_activity(
+    client: AsyncClient,
+    notification: Notification,
+    staff_user: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Staff cannot retrieve another user's activity by knowing its ID."""
+    session.add(
+        NotificationSeen(notification_id=notification.id, user_id=str(staff_user.id))
+    )
+    await session.commit()
+    as_user(staff_user)
+
+    response = await client.get(f"/activities/{notification.id}/")
+
+    assert response.status_code == 404
 
 
 async def test_retrieve_serves_a_seen_notification(
@@ -222,24 +269,26 @@ async def test_delete_notification_reports_a_missing_activity(
     assert response.status_code == 404
 
 
-async def test_delete_activities_destroys_everything_seen(
+async def test_delete_activities_destroys_sent_notifications_as_admin(
     client_factory: Callable[..., AsyncClient],
-    dal: NotificationDataAccessLayer,
     notifications: List[Notification],
     staff_user: User,
     session: AsyncSession,
     as_user: Callable[[Any], None],
 ) -> None:
-    """An admin can permanently delete every activity they can see."""
-    await mark_seen(dal, staff_user, session)
+    """The explicit staff-only operation can delete sent notifications globally."""
     as_user(staff_user)
+    notification_ids = [item.id for item in notifications]
 
     async with client_factory(API_INCLUDE_HARD_DELETE=True) as client:
         response = await client.get("/activities/delete_activities/")
-        remaining = (await client.get("/activities/")).json()["count"]
 
     assert response.status_code == 204
-    assert remaining == 0
+    session.expire_all()
+    remaining = [
+        await session.get(Notification, item_id) for item_id in notification_ids
+    ]
+    assert all(item is None for item in remaining)
 
 
 async def test_hard_delete_is_refused_to_regular_users(
@@ -259,6 +308,23 @@ async def test_hard_delete_is_refused_to_regular_users(
 
     assert single.status_code == 403
     assert everything.status_code == 403
+
+
+async def test_hard_delete_is_refused_to_superuser_without_staff(
+    client_factory: Callable[..., AsyncClient],
+    notification: Notification,
+    superuser_only: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Superuser status alone does not grant the explicit admin permission."""
+    as_user(superuser_only)
+
+    async with client_factory(API_INCLUDE_HARD_DELETE=True) as client:
+        response = await client.get(
+            f"/activities/{notification.id}/delete_notification/"
+        )
+
+    assert response.status_code == 403
 
 
 async def test_listing_can_be_switched_off(

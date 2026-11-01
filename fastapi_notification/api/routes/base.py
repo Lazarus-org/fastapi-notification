@@ -24,8 +24,10 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
     """Shared behaviour for the notification and activity routers.
 
     Holds the parts the two routers have in common: choosing how much detail to
-    return based on the viewer's role and the settings, picking a serializer to
-    match, and running a listing through filtering, counting and pagination.
+    return based on package settings, picking a serializer to match, and running
+    a listing through filtering, counting and pagination. Authorization and
+    audience visibility are independent of staff/superuser presentation roles.
+
     """
 
     def __init__(self, user_dependency: Optional[Callable[..., Any]] = None) -> None:
@@ -46,6 +48,7 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             Sequence[str]: The normalized identifiers of the user's groups.
+
         """
         return list(await get_identity_adapter().get_user_group_ids(session, user))
 
@@ -61,6 +64,7 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             bool: Whether whole notifications should be selected.
+
         """
         return bool(
             display_detail
@@ -70,18 +74,19 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
         )
 
     def get_serializer_class(self, user: Any) -> Type[Any]:
-        """Return the serializer matching the viewer's role and the settings.
+        """Return the serializer selected by package settings.
 
         Args:
             user (Any): The current user.
 
         Returns:
             Type[Any]: The serializer class to use.
+
         """
-        if (
-            get_identity_adapter().is_staff(user)
-            or config.include_serializer_full_details
-        ):
+        # Staff and superuser status must not reveal additional notification
+        # fields. The representation is controlled only by explicit settings.
+        del user
+        if config.include_serializer_full_details:
             return NotificationSerializer
 
         return config.notification_serializer_class or NotificationDynamicSerializer
@@ -94,6 +99,7 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             NotificationDataAccessLayer: The data access layer.
+
         """
         return NotificationDataAccessLayer(session)
 
@@ -115,6 +121,7 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Raises:
             NotImplementedError: Always; each router supplies its own.
+
         """
         raise NotImplementedError
 
@@ -137,11 +144,9 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
             Dict[str, Any]: The paginated response body.
 
         """
-        # Staff always see full details, so the statement and the fetch must
-        # agree on how much is selected before either runs.
-        display_detail = self.wants_detail(False) or get_identity_adapter().is_staff(
-            user
-        )
+        # The query shape is selected by explicit serializer settings, never
+        # by a user's staff or superuser flag.
+        display_detail = self.wants_detail(False)
 
         statement = await self.get_statement(
             session, user, display_detail=display_detail

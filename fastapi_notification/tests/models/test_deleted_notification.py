@@ -28,14 +28,20 @@ async def test_create_rejects_an_unrelated_user(
         await DeletedNotification.create(session, notification, other_user)
 
 
-async def test_create_allows_staff(
+async def test_create_rejects_staff_without_audience_membership(
     notification: Notification, staff_user: User, session: AsyncSession
 ) -> None:
-    """Staff may delete any notification."""
-    deleted = await DeletedNotification.create(session, notification, staff_user)
-    await session.commit()
+    """Staff cannot soft-delete another user's personal notification."""
+    with pytest.raises(PermissionError, match="delete"):
+        await DeletedNotification.create(session, notification, staff_user)
 
-    assert deleted.user_id == str(staff_user.id)
+
+async def test_create_rejects_superuser_without_audience_membership(
+    notification: Notification, superuser_only: User, session: AsyncSession
+) -> None:
+    """Superuser status alone does not grant permission to soft-delete."""
+    with pytest.raises(PermissionError, match="delete"):
+        await DeletedNotification.create(session, notification, superuser_only)
 
 
 async def test_str_falls_back_when_relationships_are_absent(

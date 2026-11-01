@@ -335,7 +335,13 @@ Authenticated users are limited to `AUTHENTICATED_USER_THROTTLE_RATE` (30 a minu
 
 ## Permissions
 
-Every route requires an authenticated user; without one the response is `401`. The two permanent-deletion routes additionally require `is_staff`, and return `403` otherwise. An extra permission class can be applied to every route through `API_EXTRA_PERMISSION_CLASS`.
+Every route requires an authenticated user; without one the response is `401`. All
+users, including staff and superusers, see only notifications addressed to them
+directly or through their groups. Staff status does not bypass model-level
+recipient permissions. The two permanent-deletion routes are separate staff-only
+administrative operations, disabled by default; a superuser must also be staff
+to use them. An extra permission class can be applied to every route through
+`API_EXTRA_PERMISSION_CLASS`.
 
 ---
 

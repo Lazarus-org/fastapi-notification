@@ -55,6 +55,7 @@ class Notification(Base):
         public (bool): Indicates if the notification is public.
         data (Optional[dict]): Additional metadata associated with the notification.
         timestamp (datetime): Time when the notification was created.
+
     """
 
     __tablename__ = "notification"
@@ -76,7 +77,9 @@ class Notification(Base):
     description: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,
-        comment=("A textual description providing more detail about the notification."),
+        comment=(
+            "A textual description providing more detail about the notification."
+        ),
     )
     status: Mapped[str] = mapped_column(
         String(15),
@@ -222,6 +225,7 @@ class Notification(Base):
 
         Returns:
             str: The string representation of the notification.
+
         """
         return f"{self.description} {naturaltime(self.timestamp)}"
 
@@ -230,10 +234,13 @@ class Notification(Base):
 
         Returns:
             str: The generated title for the notification.
+
         """
         if self.target:
             if self.action_object:
-                return f"{self.actor} {self.verb} {self.action_object} on {self.target}"
+                return (
+                    f"{self.actor} {self.verb} {self.action_object} on {self.target}"
+                )
             return f"{self.actor} {self.verb} {self.target}"
         if self.action_object:
             return f"{self.actor} {self.verb} {self.action_object}"
@@ -251,6 +258,7 @@ class Notification(Base):
         Returns:
             Notification: This notification, with its generic relations
             populated.
+
         """
         await ensure_loaded(
             session,
@@ -307,6 +315,7 @@ class Notification(Base):
         Raises:
             PermissionError: If the user does not have permission to mark the
                 notification as seen.
+
         """
         await NotificationPermission(self).validate_permission_async(
             session, user, "mark as seen"

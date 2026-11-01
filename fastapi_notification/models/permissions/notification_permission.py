@@ -14,8 +14,9 @@ class NotificationPermission:
     """Determine whether a host identity may act on a notification.
 
     Permission checks use the notification's opaque recipient/group association
-    identifiers and the configured identity adapter. They do not depend on ORM
-    relationships to package-owned ``User`` or ``Group`` tables.
+    identifiers and the configured identity adapter. Staff and superuser flags
+    do not grant access to another user's personal notification. Administrative
+    operations are authorized separately at their dedicated API boundaries.
     """
 
     def __init__(self, notification: Any) -> None:
@@ -43,9 +44,7 @@ class NotificationPermission:
             for group in getattr(self.notification, "group", [])
         }
         return (
-            is_recipient
-            or bool(user_group_ids.intersection(notification_group_ids))
-            or adapter.is_staff(user)
+            is_recipient or bool(user_group_ids.intersection(notification_group_ids))
         )
 
     def validate_permission(self, user: Any, action: str) -> None:
@@ -59,9 +58,6 @@ class NotificationPermission:
         """Validate permission using opaque IDs and the host identity adapter."""
         adapter = get_identity_adapter()
         user_id = adapter.get_user_id(user)
-
-        if adapter.is_staff(user):
-            return
 
         recipient_result = await session.execute(
             select(NotificationRecipient.id).where(

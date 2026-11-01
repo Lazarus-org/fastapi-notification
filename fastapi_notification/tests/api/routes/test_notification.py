@@ -63,20 +63,24 @@ async def test_list_serves_summary_fields_to_regular_users(
     assert set(result) == {"title", "id", "description", "status", "link", "timestamp"}
 
 
-async def test_list_serves_full_details_to_staff(
+async def test_staff_get_the_same_default_representation_for_their_own_notifications(
     client: AsyncClient,
-    notification: Notification,
+    dal: NotificationDataAccessLayer,
+    user: User,
     staff_user: User,
+    session: AsyncSession,
     as_user: Callable[[Any], None],
 ) -> None:
-    """Staff get the detailed representation."""
+    """Staff status does not force full notification details."""
+    await dal.create_notification(
+        verb="staff update", actor=user, recipients=staff_user, is_sent=True
+    )
+    await session.commit()
     as_user(staff_user)
 
     result = (await client.get("/notifications/")).json()["results"][0]
 
-    assert "recipient" in result
-    assert "seen_by" in result
-    assert "actor_content_type" in result
+    assert set(result) == {"title", "id", "description", "status", "link", "timestamp"}
 
 
 async def test_list_can_be_searched(
@@ -216,6 +220,84 @@ async def test_group_members_see_group_notifications(
 
     async with client_factory() as client:
         assert (await client.get("/notifications/")).json()["count"] == 1
+
+
+async def test_staff_cannot_list_another_users_notification(
+    client: AsyncClient,
+    notification: Notification,
+    staff_user: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Staff see only notifications addressed to them or their groups."""
+    as_user(staff_user)
+
+    response = await client.get("/notifications/")
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 0
+
+
+async def test_superuser_cannot_list_another_users_notification(
+    client: AsyncClient,
+    notification: Notification,
+    superuser_only: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Superuser status does not widen the personal notification audience."""
+    as_user(superuser_only)
+
+    response = await client.get("/notifications/")
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 0
+
+
+async def test_staff_cannot_retrieve_another_users_notification(
+    client: AsyncClient,
+    notification: Notification,
+    staff_user: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Retrieval does not let staff bypass the notification audience."""
+    as_user(staff_user)
+
+    assert (await client.get(f"/notifications/{notification.id}/")).status_code == 404
+
+
+async def test_superuser_cannot_retrieve_another_users_notification(
+    client: AsyncClient,
+    notification: Notification,
+    superuser_only: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Retrieval does not let superusers bypass the notification audience."""
+    as_user(superuser_only)
+
+    assert (await client.get(f"/notifications/{notification.id}/")).status_code == 404
+
+
+async def test_staff_can_list_notifications_addressed_to_their_group(
+    client_factory: Callable[..., AsyncClient],
+    dal: NotificationDataAccessLayer,
+    user: User,
+    group: Group,
+    staff_user: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Staff retain ordinary group-audience access without a global bypass."""
+    staff_user.groups.append(group)
+    await dal.create_notification(
+        verb="group announcement", actor=user, groups=group, is_sent=True
+    )
+    await session.commit()
+    as_user(staff_user)
+
+    async with client_factory() as client:
+        response = await client.get("/notifications/")
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
 
 
 async def test_unsent_notifications_are_not_listed(

@@ -13,7 +13,6 @@ from fastapi_notification.api.dependencies.db import get_session
 from fastapi_notification.api.filters.notification_filter import NotificationFilter
 from fastapi_notification.api.routes.base import BaseNotificationRoutes
 from fastapi_notification.api.schemas.notification import NotificationSerializer
-from fastapi_notification.identity import get_identity_adapter
 from fastapi_notification.settings.conf import config
 
 
@@ -34,6 +33,7 @@ class ActivityRoutes(BaseNotificationRoutes):
     Permissions:
     - Regular Users: Can list, retrieve and clear their own notifications.
     - Admin Users: Can additionally hard delete notifications, when enabled.
+
     """
 
     async def get_statement(
@@ -44,8 +44,9 @@ class ActivityRoutes(BaseNotificationRoutes):
     ) -> Select:
         """Build the statement returning the user's seen notifications.
 
-        Staff see every seen notification with full details; everyone else sees
-        the ones addressed to them or to a group they belong to.
+        Every user sees only activities for notifications addressed to them
+        directly or to a group they belong to. Staff and superuser status does
+        not widen the personal activity view.
 
         Args:
             session (AsyncSession): The session used to read.
@@ -54,12 +55,9 @@ class ActivityRoutes(BaseNotificationRoutes):
 
         Returns:
             Select: The statement.
+
         """
         dal = self.get_dal(session)
-
-        if get_identity_adapter().is_staff(user):
-            return dal.seen_statement(seen_by=user, display_detail=True)
-
         groups = await self.get_user_groups(session, user)
 
         return dal.seen_statement(
@@ -94,6 +92,7 @@ def create_activity_router(
 
     Returns:
         APIRouter: The configured router.
+
     """
     from fastapi_notification.settings.checks import run_checks
 
@@ -131,6 +130,7 @@ def create_activity_router(
 
             Returns:
                 Dict[str, Any]: The paginated activities.
+
             """
             return await routes.list_notifications(request, session, user, filterset)
 
@@ -153,6 +153,7 @@ def create_activity_router(
 
             Returns:
                 Response: An empty 204 response.
+
             """
             await routes.get_dal(session).clear_all(user)
             await session.commit()
@@ -164,7 +165,7 @@ def create_activity_router(
         @router.get(
             "/delete_activities/",
             status_code=status.HTTP_204_NO_CONTENT,
-            summary="Permanently delete all activities",
+            summary="Permanently delete sent notifications (administrative)",
         )
         async def delete_activities(  # type: ignore[misc]
             request: Request,
@@ -172,7 +173,11 @@ def create_activity_router(
             user: Any = Depends(admin_dep),
             filterset: NotificationFilter = Depends(routes.get_filter_dependency()),
         ) -> Response:
-            """Permanently delete every activity visible to the admin user.
+            """Permanently delete sent notifications as an administrative action.
+
+            This operation is deliberately global rather than scoped to the
+            administrator's personal inbox. The route is registered only when
+            hard deletion is enabled and requires the explicit staff guard.
 
             Args:
                 request (Request): The current request.
@@ -182,8 +187,11 @@ def create_activity_router(
 
             Returns:
                 Response: An empty 204 response.
+
             """
-            statement = await routes.get_statement(session, user, display_detail=True)
+            # This is an explicit, staff-only administrative operation. It is
+            # intentionally not derived from the admin's personal activity view.
+            statement = routes.get_dal(session).sent_statement(display_detail=True)
             statement = filterset.filter_queryset(statement)
 
             await routes.get_dal(session).delete_many(statement)
@@ -214,11 +222,14 @@ def create_activity_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist or is not visible to the user.
+
             """
             statement = await routes.get_statement(session, user, display_detail=True)
             statement = filterset.filter_queryset(statement)
 
-            notification = await routes.get_dal(session).get(statement, notification_id)
+            notification = await routes.get_dal(session).get(
+                statement, notification_id
+            )
 
             if notification is None:
                 raise HTTPException(
@@ -252,6 +263,7 @@ def create_activity_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist or is not visible to the user.
+
             """
             try:
                 await routes.get_dal(session).delete_notification(
@@ -291,6 +303,7 @@ def create_activity_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist.
+
             """
             try:
                 await routes.get_dal(session).delete_notification(

@@ -37,11 +37,14 @@ def test_regular_users_get_the_dynamic_serializer() -> None:
     assert routes.get_serializer_class(Viewer()) is NotificationDynamicSerializer
 
 
-def test_staff_get_the_detailed_serializer() -> None:
-    """Staff get the detailed serializer."""
+def test_staff_get_the_same_default_serializer_as_regular_users() -> None:
+    """Staff status does not reveal additional notification fields."""
     routes = BaseNotificationRoutes()
 
-    assert routes.get_serializer_class(Viewer(is_staff=True)) is NotificationSerializer
+    assert (
+        routes.get_serializer_class(Viewer(is_staff=True))
+        is NotificationDynamicSerializer
+    )
 
 
 def test_full_details_can_be_forced_for_everyone() -> None:

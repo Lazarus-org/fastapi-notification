@@ -13,11 +13,16 @@ class FakeUser:
     """A stand-in user, so the permission logic can be tested in isolation."""
 
     def __init__(
-        self, identifier: int, groups: List[Any], is_staff: bool = False
+        self,
+        identifier: int,
+        groups: List[Any],
+        is_staff: bool = False,
+        is_superuser: bool = False,
     ) -> None:
         self.id = identifier
         self.groups = groups
         self.is_staff = is_staff
+        self.is_superuser = is_superuser
         self.username = f"user-{identifier}"
 
 
@@ -53,12 +58,20 @@ def test_group_member_has_permission() -> None:
     assert permission.user_has_permission(user) is True
 
 
-def test_staff_has_permission() -> None:
-    """Staff may act on any notification."""
+def test_staff_without_audience_membership_has_no_permission() -> None:
+    """Staff status alone does not grant access to a personal notification."""
     user = FakeUser(3, groups=[], is_staff=True)
     permission = NotificationPermission(FakeNotification([], []))
 
-    assert permission.user_has_permission(user) is True
+    assert permission.user_has_permission(user) is False
+
+
+def test_superuser_without_audience_membership_has_no_permission() -> None:
+    """Superuser status alone does not grant access to a personal notification."""
+    user = FakeUser(5, groups=[], is_superuser=True)
+    permission = NotificationPermission(FakeNotification([], []))
+
+    assert permission.user_has_permission(user) is False
 
 
 def test_unrelated_user_has_no_permission() -> None:

@@ -1,11 +1,14 @@
+from types import SimpleNamespace
 from typing import Any, Iterator, List
 
 import pytest
+from sqlalchemy.dialects import sqlite
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_notification.models.auth import Group, User
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.repository.queryset.notification import (
+    NotificationQuerySet,
     _as_sequence,
     _ids,
     add_groups,
@@ -64,3 +67,26 @@ async def test_adding_no_groups_is_a_no_op(
     await session.refresh(notification)
 
     assert notification.group == []
+
+
+@pytest.mark.parametrize(
+    ("identifier", "is_staff", "is_superuser"),
+    [("staff-17", True, False), ("root-23", False, True)],
+)
+def test_elevated_roles_are_still_recipient_scoped(
+    identifier: str, is_staff: bool, is_superuser: bool
+) -> None:
+    """Staff and superuser flags do not remove the recipient SQL predicate."""
+    viewer = SimpleNamespace(
+        id=identifier, is_staff=is_staff, is_superuser=is_superuser
+    )
+    statement = NotificationQuerySet().unseen(
+        unseen_by=viewer, display_detail=True
+    )
+    sql = str(
+        statement.compile(
+            dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+
+    assert f"notification_recipient.recipient_id IN ('{identifier}')" in sql

@@ -16,6 +16,7 @@ class NotificationFilter:
     Replaces the ``django-filter`` filter set, the search backend and the
     ordering backend of the original package with a single dependency driven by
     query parameters.
+
     """
 
     def __init__(
@@ -63,6 +64,7 @@ class NotificationFilter:
 
         Returns:
             List[ColumnElement[bool]]: The conditions to apply.
+
         """
         conditions: List[ColumnElement[bool]] = []
 
@@ -113,6 +115,7 @@ class NotificationFilter:
         Returns:
             Optional[ColumnElement[bool]]: The condition, or ``None`` when no
             search term was given.
+
         """
         if not self.search:
             return None
@@ -140,6 +143,7 @@ class NotificationFilter:
         Returns:
             Select: The ordered statement, unchanged when the requested field is
             not allowed.
+
         """
         if not self.ordering:
             return statement
@@ -166,6 +170,7 @@ class NotificationFilter:
 
         Returns:
             Select: The narrowed statement.
+
         """
         for condition in self.filter_conditions():
             statement = statement.where(condition)
@@ -186,5 +191,6 @@ def get_filterset(request: Request) -> Any:
 
     Returns:
         Any: The configured filter set class, or :class:`NotificationFilter`.
+
     """
     return config.api_filterset_class or NotificationFilter

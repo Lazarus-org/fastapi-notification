@@ -12,7 +12,6 @@ from fastapi_notification.api.dependencies.db import get_session
 from fastapi_notification.api.filters.notification_filter import NotificationFilter
 from fastapi_notification.api.routes.base import BaseNotificationRoutes
 from fastapi_notification.api.schemas.notification import NotificationSerializer
-from fastapi_notification.identity import get_identity_adapter
 
 
 class NotificationRoutes(BaseNotificationRoutes):
@@ -37,7 +36,9 @@ class NotificationRoutes(BaseNotificationRoutes):
 
     Permissions:
     - Only authenticated users may interact with notifications.
-    - Staff users see every sent notification, with full details.
+    - Every user, including staff and superusers, sees only notifications
+      addressed to them directly or through a group they belong to.
+
     """
 
     async def get_statement(
@@ -48,8 +49,9 @@ class NotificationRoutes(BaseNotificationRoutes):
     ) -> Select:
         """Build the statement returning the user's unseen notifications.
 
-        Staff see every unseen notification with full details; everyone else
-        sees the ones addressed to them or to a group they belong to.
+        Every user sees only unseen notifications addressed to them directly
+        or to a group they belong to. Staff and superuser status does not widen
+        the notification audience.
 
         Args:
             session (AsyncSession): The session used to read.
@@ -58,16 +60,14 @@ class NotificationRoutes(BaseNotificationRoutes):
 
         Returns:
             Select: The statement.
+
         """
         dal = self.get_dal(session)
-
-        if get_identity_adapter().is_staff(user):
-            return dal.unseen_statement(unseen_by=user, display_detail=True)
-
         groups = await self.get_user_groups(session, user)
 
         return dal.unseen_statement(
             unseen_by=user,
+            recipients=user,
             groups=groups,
             display_detail=self.wants_detail(display_detail),
         )
@@ -96,6 +96,7 @@ def create_notification_router(
 
     Returns:
         APIRouter: The configured router.
+
     """
     from fastapi_notification.settings.checks import run_checks
 
@@ -132,6 +133,7 @@ def create_notification_router(
 
             Returns:
                 Dict[str, Any]: The paginated notifications.
+
             """
             return await routes.list_notifications(request, session, user, filterset)
 
@@ -148,6 +150,7 @@ def create_notification_router(
 
         Returns:
             Dict[str, str]: How many notifications were marked as seen.
+
         """
         count = await routes.get_dal(session).mark_all_as_seen(user)
         await session.commit()
@@ -177,11 +180,14 @@ def create_notification_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist or is not visible to the user.
+
             """
             statement = await routes.get_statement(session, user, display_detail=True)
             statement = filterset.filter_queryset(statement)
 
-            notification = await routes.get_dal(session).get(statement, notification_id)
+            notification = await routes.get_dal(session).get(
+                statement, notification_id
+            )
 
             if notification is None:
                 raise HTTPException(

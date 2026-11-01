@@ -218,10 +218,11 @@ Filters
     a notification matches if it reached either audience.
 
 ``exclude_deleted_by``
-    A user whose soft deleted notifications are left out of the results. On
-    ``sent`` and ``unsent``, passing this also narrows the results to the
-    user's own notifications — unless they are staff or a superuser, who see
-    everything.
+    A user whose soft-deleted notifications are left out of the results. On
+    ``sent`` and ``unsent``, when no explicit recipient filter is supplied,
+    this also adds that user's direct recipient identity to the audience. If
+    ``groups`` is supplied, direct-recipient and group conditions are combined
+    with OR. Staff and superuser flags never bypass this audience restriction.
 
 ``conditions``
     A sequence of SQLAlchemy boolean expressions applied to the statement, for
@@ -340,8 +341,11 @@ deletes one notification in either of two ways:
   must be visible to them.
 
 Either way, ``LookupError`` is raised when the notification does not exist or is
-not visible to the given recipient. Ordinary users can only reach notifications
-addressed to them; staff and superusers can reach any sent notification.
+not visible to the given recipient. When a recipient is supplied, access is
+limited to notifications addressed directly to that identity or to one of its
+groups, regardless of staff or superuser status. Omitting ``recipient`` for a
+hard delete is an unscoped operation intended for trusted application code; the
+package's public administrative endpoint separately requires staff permission.
 
 .. code-block:: python
 

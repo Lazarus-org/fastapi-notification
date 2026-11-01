@@ -1,47 +1,61 @@
-Roles
-=====
+Roles and Permissions
+=====================
 
-The API serves the same endpoints to everyone, but what those endpoints return
-depends on who is asking. Three roles matter: the ordinary authenticated user,
-the staff user, and the superuser.
+The package distinguishes notification audience membership from administrative
+capabilities. An authenticated user's staff or superuser flag does **not** grant
+access to another user's personal notifications.
 
-A role is resolved by the configured :class:`~fastapi_notification.identity.IdentityAdapter`
-from the user object returned by your current-user dependency. The default
-adapter reads ``is_staff``, ``is_superuser`` and ``groups``. Configure a custom
-adapter when your application uses different attribute names or stores group
-membership separately. The optional packaged
+A role is resolved by the configured
+:class:`~fastapi_notification.identity.IdentityAdapter` from the user object
+returned by your current-user dependency. The default adapter reads
+``is_staff``, ``is_superuser`` and ``groups``. Configure a custom adapter when
+your application uses different attribute names or stores group membership
+separately. The optional packaged
 :class:`~fastapi_notification.models.auth.User` model provides the conventional
 attributes.
+
+
+Notification Audience
+---------------------
+
+Every authenticated user, regardless of role, can see only notifications that
+were sent and addressed to them directly or through a group they belong to.
+The audience rules apply consistently to:
+
+- Notification listings and retrieval.
+- Activity listings and retrieval.
+- Mark-as-seen operations.
+- Soft deletion and clearing operations.
+- Model-level permission checks.
+
+A notification addressed to someone else is invisible: it is absent from
+listings, and requesting it by identifier returns ``404`` rather than ``403``.
+This avoids revealing whether another user's notification exists. A legacy
+``seen`` association does not bypass the audience check.
+
+Notifications a user has cleared are excluded from that user's views even though
+they remain available to other recipients.
 
 
 Authenticated User
 ------------------
 
-The default role: someone who is signed in but has neither flag set.
+An authenticated user can:
 
-**What they see.** Only notifications that were sent *and* are addressed to
-them, either as a named recipient or through a group they belong to. A
-notification addressed to someone else is invisible — it is absent from
-listings, and requesting it by identifier returns ``404`` rather than ``403``,
-so the API does not reveal that it exists.
-
-Notifications they have cleared are excluded as well, even though those
-notifications still exist for their other recipients.
-
-**What they receive.** The compact representation, carrying a generated
-``title`` alongside ``id``, ``description``, ``status``, ``link`` and
-``timestamp``. This is read with a narrower query, so listing notifications
-does not load recipients, groups and content types that will not be shown.
-
-**What they may do.**
-
-- List and retrieve their own notifications and activities.
-- Mark their notifications as seen, one at a time or all at once.
-- Clear their own activities, individually or all at once, when
+- List and retrieve notifications addressed to them directly or through their
+groups.
+- Mark those notifications as seen, individually or in bulk.
+- List, retrieve and clear their own activities, individually or in bulk, when
   ``API_INCLUDE_SOFT_DELETE`` is on.
 
-They may **not** permanently delete anything: the two hard-delete routes
-return ``403``.
+They cannot permanently delete notifications through the API. The hard-delete
+routes return ``403`` unless the caller satisfies the explicit administrative
+guard.
+
+**Representation.** The compact representation is used by default. Full details
+are available only when ``SERIALIZER_INCLUDE_FULL_DETAILS`` is enabled or a
+custom serializer/field configuration requires them. Staff and superuser flags
+do not change the representation.
 
 **Rate limit.** ``AUTHENTICATED_USER_THROTTLE_RATE``, 30 requests a minute by
 default.
@@ -50,27 +64,27 @@ default.
 Staff User
 ----------
 
-A user with ``is_staff`` set. This is the moderator or administrator role.
+A user with ``is_staff`` set.
 
-**What they see.** Every sent notification in the system, not just the ones
-addressed to them. Their listings are not narrowed by recipient or group.
+**What they see.** The same personal notification audience as every other
+user: direct recipients and groups they belong to. Staff status does not widen
+list, retrieve, activity, seen, or soft-delete access.
 
-**What they receive.** Always the detailed representation, including the
-recipients, the groups, everyone who has seen the notification, the content
-types behind the actor, target and action object, and the ``data`` payload.
-Staff receive this regardless of the ``SERIALIZER_INCLUDE_FULL_DETAILS``
-setting.
+**What they may do.** In addition to ordinary personal notification operations,
+staff users may use the two permanent-deletion routes when
+``API_INCLUDE_HARD_DELETE`` is enabled. These routes are separately guarded by
+staff authorization:
 
-**What they may do.** Everything an authenticated user may do, and in addition:
+- Permanently delete a single notification by ID.
+- Permanently delete sent notifications through the administrative bulk-delete
+  route, optionally narrowed by the configured filters.
 
-- Permanently delete a single notification, when ``API_INCLUDE_HARD_DELETE``
-  is on.
-- Permanently delete every activity they can see, when
-  ``API_INCLUDE_HARD_DELETE`` is on.
+The bulk administrative operation is intentionally global; it does not use
+the administrator's personal activity listing. It is destructive and is
+therefore disabled by default.
 
-Staff also pass the model-level permission checks: they may mark any
-notification as seen, or soft-delete any notification, even one that was never
-addressed to them.
+Staff status alone does not grant model-level permission to mark or soft-delete
+another user's notification.
 
 **Rate limit.** ``STAFF_USER_THROTTLE_RATE``, 100 requests a minute by
 default.
@@ -79,45 +93,58 @@ default.
 Superuser
 ---------
 
-A user with ``is_superuser`` set. In practice a superuser is also staff, and
-the two roles behave alike through the API.
+A user with ``is_superuser`` set.
 
-The flag matters in the data access layer: like ``is_staff``, it prevents a
-query from being narrowed to the user's own notifications. A superuser who is
-*not* also staff therefore sees every sent notification, but is still subject
-to the ordinary user throttle rate and is still refused by the hard-delete
-routes, which check ``is_staff`` alone.
+**What they see and may do.** A superuser has the same personal notification
+audience and model-level permissions as every other authenticated user.
+Superuser status alone does not grant access to another user's notifications
+and does not satisfy the staff-only permanent-deletion guard.
 
-If you intend someone to have full access, set both flags.
+An application may set both ``is_superuser`` and ``is_staff`` when it intends a
+superuser to use the package's staff-only administrative deletion routes.
+
+**Rate limit.** A superuser who is not staff uses the ordinary authenticated
+user rate. A superuser who is also staff uses the staff rate.
 
 
 Comparison
 ----------
 
-===============================  =================  =================  =================
-Capability                       Authenticated      Staff              Superuser
-===============================  =================  =================  =================
-Sees own notifications           Yes                Yes                Yes
-Sees others' notifications       No                 Yes                Yes
-Detailed representation          Only if configured Always             Only if staff
-Mark as seen                     Own only           Any                Any
-Soft delete                      Own only           Any                Any
-Hard delete routes               No (403)           Yes                Only if staff
-Throttle rate                    30/minute          100/minute         30/minute
-===============================  =================  =================  =================
+====================================  ========================  ========================  ========================
+ Capability                            Authenticated             Staff                     Superuser
+====================================  ========================  ========================  ========================
+ Sees own notifications                Yes                       Yes                       Yes
+------------------------------------  ------------------------  ------------------------  ------------------------
+ Sees group notifications              Yes                       Yes                       Yes
+------------------------------------  ------------------------  ------------------------  ------------------------
+ Sees others' notifications            No                        No                        No
+------------------------------------  ------------------------  ------------------------  ------------------------
+ Detailed representation               Only if configured        Only if configured        Only if configured
+------------------------------------  ------------------------  ------------------------  ------------------------
+ Mark as seen                          Own/groups only           Own/groups only           Own/groups only
+------------------------------------  ------------------------  ------------------------  ------------------------
+ Soft delete                           Own/groups only           Own/groups only           Own/groups only
+------------------------------------  ------------------------  ------------------------  ------------------------
+ Single hard-delete route              No (403)                  Yes                       Only if staff
+------------------------------------  ------------------------  ------------------------  ------------------------
+ Bulk administrative deletion          No (403)                  Yes                       Only if staff
+------------------------------------  ------------------------  ------------------------  ------------------------
+ Throttle rate                         30/minute                 100/minute                30/minute*
+------------------------------------  ------------------------  ------------------------  ------------------------
 
-The rates shown are the defaults; both are configurable.
+* A superuser who is also staff receives the staff rate. The rates shown are
+the defaults; both are configurable.
 
 
 Choosing a Representation
 -------------------------
 
-Which serializer a request gets is decided by role first and settings second:
+The representation is decided by explicit serializer settings, never by role:
 
-1. Staff always receive ``NotificationSerializer``, the detailed one.
-2. With ``SERIALIZER_INCLUDE_FULL_DETAILS`` on, everyone receives it.
-3. A serializer named in ``SERIALIZER_CLASS`` is used for everyone else.
-4. Otherwise ``NotificationDynamicSerializer`` is used, serving the fields in
+1. With ``SERIALIZER_INCLUDE_FULL_DETAILS`` on, ``NotificationSerializer`` is
+   used for everyone.
+2. A serializer named in ``SERIALIZER_CLASS`` is used when configured.
+3. Otherwise ``NotificationDynamicSerializer`` is used, serving the fields in
    ``SERIALIZER_FIELDS`` if that is set, and the compact defaults if not.
 
 
@@ -138,4 +165,5 @@ applied to every route in both groups, and receives the request and the user:
    configure(API_EXTRA_PERMISSION_CLASS="myapp.permissions.OnlyVerifiedUsers")
 
 Returning a falsy value rejects the request with ``403``. This runs in addition
-to the built-in checks, so it can narrow access but not widen it.
+to the built-in checks, so it can narrow access but not widen it. The dedicated
+staff guard for hard deletion remains separate.

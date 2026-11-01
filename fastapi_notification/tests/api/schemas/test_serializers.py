@@ -190,7 +190,9 @@ def test_configured_helper_classes_are_used() -> None:
         USER_SERIALIZER_CLASS=(
             "fastapi_notification.api.schemas.group.PermissionSerializer"
         ),
-        GROUP_SERIALIZER_CLASS=("fastapi_notification.api.schemas.user.UserSerializer"),
+        GROUP_SERIALIZER_CLASS=(
+            "fastapi_notification.api.schemas.user.UserSerializer"
+        ),
     )
 
     assert user_serializer_class() is PermissionSerializer

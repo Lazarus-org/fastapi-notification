@@ -29,9 +29,15 @@ pytestmark = [pytest.mark.api, pytest.mark.api_dependencies]
 class Viewer:
     """A stand-in user for dependencies that do not touch the database."""
 
-    def __init__(self, identifier: int = 1, is_staff: bool = False) -> None:
+    def __init__(
+        self,
+        identifier: int = 1,
+        is_staff: bool = False,
+        is_superuser: bool = False,
+    ) -> None:
         self.id = identifier
         self.is_staff = is_staff
+        self.is_superuser = is_superuser
 
 
 def make_request() -> Request:
@@ -261,3 +267,14 @@ async def test_the_packaged_throttle_dependency_passes() -> None:
     viewer = Viewer()
 
     assert await enforce_throttle(user=viewer) is viewer
+
+
+async def test_the_admin_guard_refuses_superuser_without_staff() -> None:
+    """Superuser status alone does not satisfy the explicit staff admin guard."""
+    superuser = Viewer(is_staff=False, is_superuser=True)
+    guard = make_admin_dependency(lambda: superuser)
+
+    with pytest.raises(HTTPException) as error:
+        await guard(user=superuser)
+
+    assert error.value.status_code == 403

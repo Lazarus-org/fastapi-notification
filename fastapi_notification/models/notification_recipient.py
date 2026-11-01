@@ -12,6 +12,7 @@ class NotificationRecipient(Base):
     Attributes:
         notification_id (int): The notification being delivered.
         recipient_id (str): The host user identifier receiving the notification.
+
     """
 
     __tablename__ = "notification_recipient"
@@ -33,6 +34,7 @@ class NotificationRecipient(Base):
 
         Returns:
             str: A representation naming the notification and the recipient.
+
         """
         notification = getattr(self, "notification", None)
         recipient = getattr(self, "recipient", None)
