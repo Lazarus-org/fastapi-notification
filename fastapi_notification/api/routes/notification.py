@@ -1,6 +1,6 @@
 from typing import Any, Callable, Dict, Optional, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,12 @@ from fastapi_notification.api.dependencies.db import get_session
 from fastapi_notification.api.filters.notification_filter import NotificationFilter
 from fastapi_notification.api.routes.base import BaseNotificationRoutes
 from fastapi_notification.api.schemas.notification import NotificationSerializer
+from fastapi_notification.api.schemas.notification_summary import (
+    NotificationPreviewItem,
+    NotificationPreviewResponse,
+    NotificationSummaryResponse,
+)
+from fastapi_notification.utils.serialization import generate_title
 
 
 class NotificationRoutes(BaseNotificationRoutes):
@@ -26,6 +32,8 @@ class NotificationRoutes(BaseNotificationRoutes):
       POST.
     - Mark All as Seen: Marks all unseen notifications for the user as seen
       using POST.
+    - Summary: Returns aggregate total, unread and read counts.
+    - Preview: Returns a bounded set of recent notifications with read state.
 
     Customizations:
     - Dynamic Serializer: Depending on the user's role or configuration
@@ -117,6 +125,82 @@ def create_notification_router(
     )
 
     if routes.is_method_enabled("LIST"):
+
+        @router.get(
+            "/summary/",
+            response_model=NotificationSummaryResponse,
+            summary="Get notification counts",
+        )
+        async def notification_summary(  # type: ignore[misc]
+            session: AsyncSession = Depends(session_dep),
+            user: Any = Depends(user_dep),
+            filterset: NotificationFilter = Depends(routes.get_filter_dependency()),
+        ) -> Dict[str, int]:
+            """Return total, unread and read counts for the current user.
+
+            Counts include sent notifications addressed directly to the user or
+            to one of their groups, exclude notifications cleared by that user,
+            and honour the same filters as the notification listing.
+
+            """
+            dal = routes.get_dal(session)
+            groups = await routes.get_user_groups(session, user)
+            statement = dal.sent_statement(
+                recipients=user,
+                exclude_deleted_by=user,
+                groups=groups,
+                display_detail=True,
+            )
+            statement = filterset.filter_queryset(statement)
+            return await dal.summary(statement, user)
+
+        @router.get(
+            "/preview/",
+            response_model=NotificationPreviewResponse,
+            summary="Preview recent notifications",
+        )
+        async def notification_preview(  # type: ignore[misc]
+            limit: int = Query(5, ge=1, le=20, description="Maximum preview items."),
+            session: AsyncSession = Depends(session_dep),
+            user: Any = Depends(user_dep),
+            filterset: NotificationFilter = Depends(routes.get_filter_dependency()),
+        ) -> Dict[str, Any]:
+            """Return the most recent visible notifications, read or unread.
+
+            The response is bounded to 1–20 items (5 by default). It includes
+            direct and group notifications, excludes unsent and user-cleared
+            notifications, and reports whether the current user has seen each
+            item.
+
+            """
+            dal = routes.get_dal(session)
+            groups = await routes.get_user_groups(session, user)
+            statement = dal.sent_statement(
+                recipients=user,
+                exclude_deleted_by=user,
+                groups=groups,
+                display_detail=True,
+            )
+            statement = filterset.filter_queryset(statement)
+            rows = await dal.preview(statement, user, limit)
+            results = [
+                NotificationPreviewItem(
+                    id=row["id"],
+                    title=generate_title(
+                        {
+                            "description": row["description"] or row["verb"],
+                            "timestamp": row["timestamp"],
+                        }
+                    ),
+                    description=row["description"],
+                    status=row["status"],
+                    link=row["link"],
+                    timestamp=row["timestamp"],
+                    is_seen=bool(row["is_seen"]),
+                )
+                for row in rows
+            ]
+            return NotificationPreviewResponse(results=results).model_dump()
 
         @router.get("/", summary="List unseen notifications")
         async def list_notifications(  # type: ignore[misc]

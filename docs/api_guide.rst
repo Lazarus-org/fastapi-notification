@@ -43,7 +43,7 @@ every request.
    * - Setting
      - Routes it controls
    * - ``FASTAPI_NOTIFICATION_API_ALLOW_LIST``
-     - Both listing routes.
+     - Notification inbox, summary and preview, plus the activity listing.
    * - ``FASTAPI_NOTIFICATION_API_ALLOW_RETRIEVE``
      - Both retrieval routes and the per-notification seen action.
    * - ``FASTAPI_NOTIFICATION_API_INCLUDE_SOFT_DELETE``
@@ -67,6 +67,12 @@ Notifications API
    * - GET
      - ``/notifications/``
      - List the notifications you have not seen.
+   * - GET
+     - ``/notifications/summary/``
+     - Return total, unread and read counts for the current user's visible notifications.
+   * - GET
+     - ``/notifications/preview/``
+     - Return the most recent visible notifications, including read-state flags.
    * - POST
      - ``/notifications/mark_all_as_seen/``
      - Mark every unseen notification as seen.
@@ -80,6 +86,56 @@ Notifications API
 Retrieving a notification is read-only. Use the explicit POST action to mark
 one notification as seen. Repeating that POST is harmless and returns
 ``204 No Content``. The bulk mark-as-seen endpoint also uses POST.
+
+Summary and preview
+~~~~~~~~~~~~~~~~~~~
+
+The summary count calculation uses one aggregate query and returns counts for
+sent notifications addressed directly to the authenticated user or to one of
+their groups. Notifications cleared by that user are excluded. The response is:
+
+.. code-block:: json
+
+   {
+     "total": 12,
+     "unread": 8,
+     "read": 4
+   }
+
+The preview endpoint returns up to 20 recent notifications (5 by default),
+including both read and unread items. Each item includes an ``is_seen`` flag.
+It selects only the fields needed for the preview, does not hydrate generic
+relations, and uses the same audience restrictions and filter conditions as
+the inbox. Preview order is always newest first, regardless of an ``ordering``
+query parameter. Both endpoints exclude unsent notifications and notifications
+the current user has cleared. The ``limit`` query parameter must be between 1
+and 20. A preview response looks like this:
+
+.. code-block:: json
+
+   {
+     "results": [
+       {
+         "id": 42,
+         "title": "alice commented on your post 2 minutes ago",
+         "description": "alice commented on your post",
+         "status": "INFO",
+         "link": "https://example.com/posts/42",
+         "timestamp": "2026-11-01T12:00:00Z",
+         "is_seen": false
+       }
+     ]
+   }
+
+.. code-block:: bash
+
+   $ curl \
+     -H "Authorization: Bearer <token>" \
+     "http://localhost:8000/notifications/summary/"
+
+   $ curl \
+     -H "Authorization: Bearer <token>" \
+     "http://localhost:8000/notifications/preview/?limit=5"
 
 
 Activities API

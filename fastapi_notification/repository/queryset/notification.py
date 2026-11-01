@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 from sqlalchemy import (
     ColumnElement,
     Select,
+    case,
     delete,
     func,
     insert,
@@ -382,6 +383,74 @@ class NotificationQuerySet:
             groups=groups,
             display_detail=display_detail,
             conditions=all_conditions,
+        )
+
+    def summary_statement(self, statement: Select, user: Any) -> Select:
+        """Build one aggregate query for a user's visible notification counts.
+
+        The supplied statement must already be scoped to sent notifications
+        addressed to the user and their groups, with that user's cleared items
+        excluded. Additional filters may be applied before it is passed here.
+
+        Args:
+            statement (Select): The scoped notification statement.
+            user (Any): The identity whose read state is being summarized.
+
+        Returns:
+            Select: A single-row aggregate with ``total``, ``unread`` and
+            ``read`` counts.
+
+        """
+        visible_ids = (
+            statement.with_only_columns(Notification.id)
+            .order_by(None)
+            .subquery()
+        )
+        seen_ids = select(NotificationSeen.notification_id).where(
+            NotificationSeen.user_id == get_identity_adapter().get_user_id(user)
+        )
+        is_seen = visible_ids.c.id.in_(seen_ids)
+
+        return select(
+            func.count(visible_ids.c.id).label("total"),
+            func.coalesce(
+                func.sum(case((is_seen, 1), else_=0)), 0
+            ).label("read"),
+            func.coalesce(
+                func.sum(case((~is_seen, 1), else_=0)), 0
+            ).label("unread"),
+        ).select_from(visible_ids)
+
+    def preview_statement(
+        self, statement: Select, user: Any, limit: int
+    ) -> Select:
+        """Build a bounded recent-notification query with per-user read state.
+
+        The supplied statement must already be scoped to the user's visible
+        sent notifications and have any requested filters applied.
+
+        Args:
+            statement (Select): The scoped notification statement.
+            user (Any): The identity whose read state is included.
+            limit (int): Maximum number of preview rows to return.
+
+        Returns:
+            Select: A query returning each notification and its ``is_seen`` flag.
+
+        """
+        return (
+            statement.with_only_columns(
+                Notification.id,
+                Notification.verb,
+                Notification.description,
+                Notification.status,
+                Notification.link,
+                Notification.timestamp,
+                self.seen_condition(user).label("is_seen"),
+            )
+            .order_by(None)
+            .order_by(Notification.timestamp.desc(), Notification.id.desc())
+            .limit(limit)
         )
 
     def deleted(

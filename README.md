@@ -16,7 +16,7 @@ It is built on async SQLAlchemy 2.0 and Pydantic v2, and it is the FastAPI count
 
 ## Highlights
 
-- **Two endpoint groups** — unseen notifications, and the activity history of everything already seen.
+- **Notification inbox and activity history** — unseen notifications, seen activity, aggregate read/unread counts, and a bounded recent preview.
 - **Anything can be an actor** — notifications reference an actor, a target and an action object generically, so any of your own models can take those roles. Generic relations support integer, UUID and string primary keys.
 - **Addressed to users or groups** — a notification reaches named recipients, every member of a group, or both.
 - **Soft and hard deletion** — clearing a notification hides it for one user while leaving it intact for the others; permanent deletion is available to administrators and off by default.
@@ -283,12 +283,20 @@ The interactive documentation at `/docs` lists every route the package registere
 | Method | Path                                      | Description                                    |
 |--------|-------------------------------------------|------------------------------------------------|
 | GET    | `/notifications/`                        | List the notifications you have not seen yet.  |
+| GET    | `/notifications/summary/`                | Return total, unread and read notification counts. |
+| GET    | `/notifications/preview/`                | Preview recent notifications, including read state. |
 | POST   | `/notifications/mark_all_as_seen/`       | Mark every unseen notification as seen.        |
 | GET    | `/notifications/{id}/`                   | Retrieve one unseen notification (read-only).  |
 | POST   | `/notifications/{id}/mark_as_seen/`      | Mark one notification as seen.                 |
 
-Retrieval is read-only. Use the explicit POST action to mark a notification as
-seen; repeating the action is harmless.
+Retrieval, summary and preview are read-only. The summary counts sent
+notifications addressed to the current user or their groups, excluding items
+the user has cleared. It returns ``total``, ``unread`` and ``read`` counts. The
+preview returns the most recent visible notifications (5 by default, at most
+20), including an ``is_seen`` flag for each item. Both endpoints honor inbox
+filter conditions; preview is always ordered newest first. Use the explicit
+POST action to mark a notification as seen;
+repeating the action is harmless.
 
 ## Activities API
 
@@ -445,7 +453,7 @@ Settings resolve in order of precedence: values registered through `configure()`
 | `IDENTITY_ADAPTER`                | class / instance / str | `IdentityAdapter`               | Integrate host user and group models.                |
 | `API_INCLUDE_SOFT_DELETE`          | bool        | `True`                         | Register the clearing routes.                        |
 | `API_INCLUDE_HARD_DELETE`          | bool        | `False`                        | Register the permanent-deletion routes.              |
-| `API_ALLOW_LIST`                   | bool        | `True`                         | Register the listing routes.                         |
+| `API_ALLOW_LIST`                   | bool        | `True`                         | Register inbox, summary, preview and activity listing routes. |
 | `API_ALLOW_RETRIEVE`               | bool        | `True`                         | Register retrieval and individual mark-as-seen routes. |
 | `SERIALIZER_INCLUDE_FULL_DETAILS`  | bool        | `False`                        | Give every user the detailed representation.         |
 | `SERIALIZER_EXCLUDE_NULL_FIELDS`   | bool        | `False`                        | Strip null fields from responses.                    |

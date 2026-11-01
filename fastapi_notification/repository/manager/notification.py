@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,6 +48,8 @@ class NotificationDataAccessLayer:
         mark_all_as_sent: Marks all unsent notifications as sent.
         mark_all_as_seen: Marks all unseen notifications for a user as seen.
         deleted: Retrieves all deleted notifications, optionally filtered by user.
+        summary: Returns aggregate total, unread and read notification counts.
+        preview: Returns a bounded set of recent notifications with read state.
         clear_all: Clears all seen notifications for a user, marking them deleted.
 
     """
@@ -403,6 +405,54 @@ class NotificationDataAccessLayer:
         if notification is not None:
             await hydrate_notification_identities(self.session, [notification])
         return notification
+
+    async def summary(self, statement: Select, user: Any) -> dict[str, int]:
+        """Return total, unread and read counts for a scoped notification query.
+
+        The statement is expected to be restricted to the authenticated user's
+        sent audience and to exclude notifications that user has cleared. The
+        aggregate is executed as one SQL query and does not load notification
+        ORM objects.
+
+        Args:
+            statement (Select): The scoped statement, including optional filters.
+            user (Any): The identity whose read state is summarized.
+
+        Returns:
+            dict[str, int]: Counts whose total equals read plus unread.
+
+        """
+        aggregate = self.query_set.summary_statement(statement, user)
+        result = await self.session.execute(aggregate)
+        row = result.mappings().one()
+        return {
+            "total": int(row["total"] or 0),
+            "unread": int(row["unread"] or 0),
+            "read": int(row["read"] or 0),
+        }
+
+    async def preview(
+        self, statement: Select, user: Any, limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Return bounded recent notification fields and their read state.
+
+        The query selects only the columns required by the preview response; it
+        does not instantiate ORM objects or hydrate generic relations.
+
+        Args:
+            statement (Select): The scoped statement, including optional filters.
+            user (Any): The identity whose read state is included.
+            limit (int): Maximum number of records to return.
+
+        Returns:
+            List[Dict[str, Any]]: Preview rows including the ``is_seen`` flag.
+
+        """
+        preview_statement = self.query_set.preview_statement(
+            statement, user, limit
+        )
+        result = await self.session.execute(preview_statement)
+        return [dict(row) for row in result.mappings().all()]
 
     async def count(self, statement: Select) -> int:
         """Return how many rows a statement would produce.

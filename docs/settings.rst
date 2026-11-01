@@ -169,8 +169,8 @@ API_ALLOW_LIST
 
 **Type:** ``bool`` — **Default:** ``True``
 
-Whether the list routes are registered. Setting this to ``False`` disables
-listing on both the notification and the activity routers.
+Whether the read/list routes are registered. Setting this to ``False`` disables
+the notification inbox, notification summary and preview, and the activity list.
 
 API_ALLOW_RETRIEVE
 ~~~~~~~~~~~~~~~~~~
