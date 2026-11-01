@@ -548,7 +548,7 @@ class NotificationDataAccessLayer:
         return await queryset.mark_all_as_sent(self.session, recipients, groups)
 
     async def mark_all_as_seen(self, user: Any) -> int:
-        """Mark all unseen notifications for a user as seen.
+        """Mark all unseen direct and group notifications for a user as seen.
 
         Args:
             user (Any): The user to mark notifications as seen for.
@@ -560,7 +560,7 @@ class NotificationDataAccessLayer:
         return await queryset.mark_all_as_seen(self.session, user)
 
     async def clear_all(self, user: Any) -> None:
-        """Soft delete every notification the given user has already seen.
+        """Soft-delete every seen notification addressed to a user or their groups.
 
         Args:
             user (Any): The user whose notifications should be cleared.

@@ -160,6 +160,50 @@ async def test_mark_all_as_seen_reports_how_many(
     assert await dal.mark_all_as_seen(user) == 0
 
 
+async def test_mark_all_as_seen_includes_group_notifications(
+    dal: NotificationDataAccessLayer,
+    user: User,
+    group: Group,
+    group_user: User,
+    session: AsyncSession,
+) -> None:
+    """Bulk seen operations include notifications addressed to user groups."""
+    await dal.create_notification(
+        verb="group announcement", actor=user, groups=group, is_sent=True
+    )
+    await session.commit()
+
+    assert await dal.mark_all_as_seen(group_user) == 1
+    await session.commit()
+
+    assert len(
+        await dal.unseen(group_user, groups=[group], display_detail=True)
+    ) == 0
+    assert len(await dal.seen(group_user, groups=[group], display_detail=True)) == 1
+
+
+async def test_mark_all_as_seen_does_not_duplicate_multiple_audiences(
+    dal: NotificationDataAccessLayer,
+    user: User,
+    group: Group,
+    group_user: User,
+    session: AsyncSession,
+) -> None:
+    """A notification addressed directly and through a group is counted once."""
+    await dal.create_notification(
+        verb="shared announcement",
+        actor=user,
+        recipients=group_user,
+        groups=group,
+        is_sent=True,
+    )
+    await session.commit()
+
+    assert await dal.mark_all_as_seen(group_user) == 1
+    await session.commit()
+    assert len(await dal.seen(group_user, groups=[group], display_detail=True)) == 1
+
+
 async def test_mark_all_as_sent_reports_how_many(
     dal: NotificationDataAccessLayer, user: User, session: AsyncSession
 ) -> None:
@@ -244,6 +288,31 @@ async def test_clear_all_soft_deletes_seen_notifications(
 
     assert len(await dal.seen(user, display_detail=True)) == 0
     assert len(await dal.deleted(user)) == 1
+    assert await session.get(Notification, notification.id) is not None
+
+
+async def test_clear_all_includes_group_notifications(
+    dal: NotificationDataAccessLayer,
+    user: User,
+    group: Group,
+    group_user: User,
+    session: AsyncSession,
+) -> None:
+    """Bulk clearing soft-deletes seen notifications addressed to groups."""
+    notification = await dal.create_notification(
+        verb="group activity", actor=user, groups=group, is_sent=True
+    )
+    await session.commit()
+
+    assert await dal.mark_all_as_seen(group_user) == 1
+    await session.commit()
+    await dal.clear_all(group_user)
+    await session.commit()
+
+    assert len(
+        await dal.seen(group_user, groups=[group], display_detail=True)
+    ) == 0
+    assert len(await dal.deleted(group_user)) == 1
     assert await session.get(Notification, notification.id) is not None
 
 

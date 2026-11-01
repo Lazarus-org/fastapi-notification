@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_notification.models.auth import Group, User
 from fastapi_notification.models.notification import Notification
+from fastapi_notification.repository.queryset import notification as queryset_module
 from fastapi_notification.repository.queryset.notification import (
     NotificationQuerySet,
     _as_sequence,
@@ -56,6 +57,58 @@ def test_ids_reads_primary_keys(user: User, other_user: User) -> None:
 def test_ids_passes_raw_integers_through() -> None:
     """Primary keys may be given directly."""
     assert _ids([1, 2]) == ["1", "2"]
+
+
+@pytest.mark.parametrize("operation", ["mark_all_as_seen", "clear_all"])
+async def test_bulk_user_operations_include_identity_adapter_groups(
+    monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    """Bulk state changes pass host group memberships into their queries."""
+    captured = {}
+
+    class FakeAdapter:
+        async def get_user_group_ids(self, session: Any, user: Any) -> List[str]:
+            return ["group-17"]
+
+    class FakeQuerySet:
+        def unseen(self, **kwargs: Any) -> object:
+            captured.update(kwargs)
+            return object()
+
+        def seen(self, **kwargs: Any) -> object:
+            captured.update(kwargs)
+            return object()
+
+    class FakeSession:
+        def add_all(self, instances: List[Any]) -> None:
+            assert instances == []
+
+        async def flush(self) -> None:
+            return None
+
+    async def fake_fetch(
+        session: Any, statement: Any, display_detail: bool = False
+    ) -> List[Any]:
+        assert display_detail is True
+        return []
+
+    monkeypatch.setattr(
+        queryset_module, "get_identity_adapter", lambda: FakeAdapter()
+    )
+    monkeypatch.setattr(queryset_module, "NotificationQuerySet", FakeQuerySet)
+    monkeypatch.setattr(queryset_module, "fetch", fake_fetch)
+
+    session = FakeSession()
+    user = SimpleNamespace(id="user-12")
+    if operation == "mark_all_as_seen":
+        assert await queryset_module.mark_all_as_seen(session, user) == 0
+        assert captured["unseen_by"] is user
+    else:
+        await queryset_module.clear_all(session, user)
+        assert captured["seen_by"] is user
+
+    assert captured["groups"] == ["group-17"]
+    assert captured["display_detail"] is True
 
 
 async def test_adding_no_groups_is_a_no_op(

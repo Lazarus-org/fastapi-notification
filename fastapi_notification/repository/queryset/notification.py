@@ -620,10 +620,16 @@ async def mark_all_as_seen(session: AsyncSession, user: Any) -> int:
         user (Any): The user to mark notifications as seen for.
 
     Returns:
-        int: The number of notifications marked as seen.
+        int: The number of notifications marked as seen, including notifications
+            addressed to groups the user belongs to.
 
     """
-    statement = NotificationQuerySet().unseen(unseen_by=user, display_detail=True)
+    group_ids = await get_identity_adapter().get_user_group_ids(session, user)
+    statement = NotificationQuerySet().unseen(
+        unseen_by=user,
+        groups=group_ids,
+        display_detail=True,
+    )
     notifications = await fetch(session, statement, display_detail=True)
 
     session.add_all(
@@ -676,14 +682,22 @@ async def mark_all_as_sent(
 
 
 async def clear_all(session: AsyncSession, user: Any) -> None:
-    """Soft delete every notification a user has already seen.
+    """Soft-delete every notification a user has already seen.
+
+    Notifications addressed directly to the user and to their groups are both
+    included.
 
     Args:
         session (AsyncSession): The session used to write.
         user (Any): The user whose notifications should be cleared.
 
     """
-    statement = NotificationQuerySet().seen(seen_by=user, display_detail=True)
+    group_ids = await get_identity_adapter().get_user_group_ids(session, user)
+    statement = NotificationQuerySet().seen(
+        seen_by=user,
+        groups=group_ids,
+        display_detail=True,
+    )
     notifications = await fetch(session, statement, display_detail=True)
 
     session.add_all(

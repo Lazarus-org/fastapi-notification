@@ -340,6 +340,30 @@ async def test_mark_all_as_seen_clears_the_list(
     assert (await client.get("/notifications/")).json()["count"] == 0
 
 
+async def test_group_member_can_mark_all_group_notifications_as_seen(
+    client: AsyncClient,
+    dal: NotificationDataAccessLayer,
+    user: User,
+    group: Group,
+    group_user: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """The API bulk action includes notifications addressed to user groups."""
+    await dal.create_notification(
+        verb="group announcement", actor=user, groups=group, is_sent=True
+    )
+    await session.commit()
+    as_user(group_user)
+
+    response = await client.post("/notifications/mark_all_as_seen/")
+
+    assert response.status_code == 200
+    assert response.json() == {"detail": "1 Notifications marked as seen."}
+    assert (await client.get("/notifications/")).json()["count"] == 0
+    assert (await client.get("/activities/")).json()["count"] == 1
+
+
 async def test_group_members_see_group_notifications(
     client_factory: Callable[..., AsyncClient],
     dal: NotificationDataAccessLayer,

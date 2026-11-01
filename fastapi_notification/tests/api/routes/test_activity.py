@@ -4,7 +4,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi_notification.models.auth import User
+from fastapi_notification.models.auth import Group, User
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.repository.manager.notification import (
@@ -237,6 +237,32 @@ async def test_clear_activities_soft_deletes_everything(
 
     assert response.status_code == 204
     assert (await client.get("/activities/")).json()["count"] == 0
+
+
+async def test_group_member_can_clear_group_activities(
+    client: AsyncClient,
+    dal: NotificationDataAccessLayer,
+    user: User,
+    group: Group,
+    group_user: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """The clear-all API action includes seen notifications addressed to groups."""
+    notification = await dal.create_notification(
+        verb="group activity", actor=user, groups=group, is_sent=True
+    )
+    await session.commit()
+    await dal.mark_all_as_seen(group_user)
+    await session.commit()
+    as_user(group_user)
+
+    response = await client.delete("/activities/clear_activities/")
+
+    assert response.status_code == 204
+    assert (await client.get("/activities/")).json()["count"] == 0
+    assert await session.get(Notification, notification.id) is not None
+    assert len(await dal.deleted(group_user)) == 1
 
 
 async def test_soft_delete_routes_can_be_switched_off(
