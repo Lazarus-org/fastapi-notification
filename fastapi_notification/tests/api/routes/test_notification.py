@@ -1,20 +1,61 @@
 from typing import Any, Callable, List
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi_notification.api.routers.notification import create_router
+from fastapi_notification.identity import BuiltInIdentityAdapter
 from fastapi_notification.models.auth import Group, User
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.repository.manager.notification import (
     NotificationDataAccessLayer,
 )
+from fastapi_notification.settings.conf import configure
 
 pytestmark = [
     pytest.mark.api,
     pytest.mark.api_routes,
     pytest.mark.api_routes_notification,
 ]
+
+
+def test_openapi_documents_state_changes_with_write_methods() -> None:
+    """OpenAPI exposes POST/DELETE for state changes and no GET variants."""
+    async def session_dependency() -> Any:
+        yield None
+
+    async def user_dependency() -> Any:
+        return object()
+
+    configure(
+        IDENTITY_ADAPTER=BuiltInIdentityAdapter,
+        API_INCLUDE_HARD_DELETE=True,
+    )
+    app = FastAPI()
+    app.include_router(
+        create_router(
+            session_dependency=session_dependency,
+            current_user_dependency=user_dependency,
+        )
+    )
+    paths = app.openapi()["paths"]
+
+    assert set(paths["/notifications/mark_all_as_seen/"]) == {"post"}
+    assert set(paths["/notifications/{notification_id}/mark_as_seen/"]) == {
+        "post"
+    }
+    assert set(paths["/activities/clear_activities/"]) == {"delete"}
+    assert set(paths["/activities/delete_activities/"]) == {"delete"}
+    assert set(
+        paths["/activities/{notification_id}/clear_notification/"]
+    ) == {"delete"}
+    assert set(
+        paths["/activities/{notification_id}/delete_notification/"]
+    ) == {"delete"}
+    assert set(paths["/notifications/{notification_id}/"]) == {"get"}
+    assert set(paths["/activities/{notification_id}/"]) == {"get"}
 
 
 async def test_list_returns_unseen_notifications(
@@ -150,20 +191,77 @@ async def test_list_can_be_filtered_by_status(
     assert body["count"] == 1
 
 
-async def test_retrieve_serves_the_notification_and_marks_it_seen(
+async def test_retrieve_is_read_only_and_does_not_mark_notification_seen(
     client: AsyncClient,
     notification: Notification,
     user: User,
     as_user: Callable[[Any], None],
 ) -> None:
-    """Reading a notification takes it out of the unseen list."""
+    """GET retrieves a notification without changing its seen state."""
     as_user(user)
 
     response = await client.get(f"/notifications/{notification.id}/")
 
     assert response.status_code == 200
     assert response.json()["verb"] == "liked your post"
+    assert (await client.get("/notifications/")).json()["count"] == 1
+
+
+async def test_post_marks_one_notification_as_seen(
+    client: AsyncClient,
+    notification: Notification,
+    user: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """The explicit POST action moves one notification into activities."""
+    as_user(user)
+
+    get_response = await client.get(
+        f"/notifications/{notification.id}/mark_as_seen/"
+    )
+    assert get_response.status_code == 405
+    assert (await client.get("/notifications/")).json()["count"] == 1
+
+    response = await client.post(
+        f"/notifications/{notification.id}/mark_as_seen/"
+    )
+
+    assert response.status_code == 204
     assert (await client.get("/notifications/")).json()["count"] == 0
+    assert (await client.get("/activities/")).json()["count"] == 1
+
+
+async def test_post_mark_as_seen_is_idempotent(
+    client: AsyncClient,
+    notification: Notification,
+    user: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Repeating the explicit seen action does not create duplicate seen rows."""
+    as_user(user)
+    path = f"/notifications/{notification.id}/mark_as_seen/"
+
+    first = await client.post(path)
+    second = await client.post(path)
+
+    assert first.status_code == 204
+    assert second.status_code == 204
+    assert (await client.get("/activities/")).json()["count"] == 1
+
+
+async def test_get_cannot_mark_all_notifications_as_seen(
+    client: AsyncClient,
+    notifications: List[Notification],
+    user: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """GET cannot invoke the bulk seen action."""
+    as_user(user)
+
+    response = await client.get("/notifications/mark_all_as_seen/")
+
+    assert response.status_code == 405
+    assert (await client.get("/notifications/")).json()["count"] == 3
 
 
 async def test_retrieve_reports_a_missing_notification(
@@ -187,6 +285,46 @@ async def test_retrieve_hides_another_users_notification(
     assert (await client.get(f"/notifications/{notification.id}/")).status_code == 404
 
 
+async def test_group_member_can_mark_group_notification_as_seen(
+    client_factory: Callable[..., AsyncClient],
+    dal: NotificationDataAccessLayer,
+    user: User,
+    group: Group,
+    group_user: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """A group member can explicitly mark a group-addressed notification seen."""
+    notification = await dal.create_notification(
+        verb="group update", actor=user, groups=group, is_sent=True
+    )
+    await session.commit()
+    as_user(group_user)
+
+    async with client_factory() as client:
+        response = await client.post(
+            f"/notifications/{notification.id}/mark_as_seen/"
+        )
+
+    assert response.status_code == 204
+
+
+async def test_mark_as_seen_hides_another_users_notification(
+    client: AsyncClient,
+    notification: Notification,
+    other_user: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """The explicit state-changing action cannot bypass audience isolation."""
+    as_user(other_user)
+
+    response = await client.post(
+        f"/notifications/{notification.id}/mark_as_seen/"
+    )
+
+    assert response.status_code == 404
+
+
 async def test_mark_all_as_seen_clears_the_list(
     client: AsyncClient,
     notifications: List[Notification],
@@ -196,7 +334,7 @@ async def test_mark_all_as_seen_clears_the_list(
     """Marking everything as seen empties the unseen list."""
     as_user(user)
 
-    response = await client.get("/notifications/mark_all_as_seen/")
+    response = await client.post("/notifications/mark_all_as_seen/")
 
     assert response.json() == {"detail": "3 Notifications marked as seen."}
     assert (await client.get("/notifications/")).json()["count"] == 0
@@ -340,8 +478,12 @@ async def test_retrieval_can_be_switched_off(
 
     async with client_factory(API_ALLOW_RETRIEVE=False) as client:
         response = await client.get(f"/notifications/{notification.id}/")
+        mark_seen = await client.post(
+            f"/notifications/{notification.id}/mark_as_seen/"
+        )
 
     assert response.status_code == 404
+    assert mark_seen.status_code == 404
 
 
 async def test_full_details_can_be_forced_for_everyone(

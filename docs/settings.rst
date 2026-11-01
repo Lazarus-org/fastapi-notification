@@ -177,8 +177,9 @@ API_ALLOW_RETRIEVE
 
 **Type:** ``bool`` — **Default:** ``True``
 
-Whether the retrieve-by-ID routes are registered. Setting this to ``False``
-disables retrieval on both routers.
+Whether the retrieve-by-ID routes and the per-notification mark-as-seen action
+are registered. Setting this to ``False`` disables single-notification
+retrieval and the individual seen action on both routers.
 
 SERIALIZER_FIELDS
 ~~~~~~~~~~~~~~~~~

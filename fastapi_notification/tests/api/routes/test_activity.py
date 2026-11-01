@@ -165,11 +165,50 @@ async def test_clear_notification_soft_deletes_it(
     await mark_seen(dal, user, session)
     as_user(user)
 
-    response = await client.get(f"/activities/{notification.id}/clear_notification/")
+    response = await client.delete(f"/activities/{notification.id}/clear_notification/")
 
     assert response.status_code == 204
     assert (await client.get("/activities/")).json()["count"] == 0
     assert await session.get(Notification, notification.id) is not None
+
+
+async def test_get_cannot_soft_delete_an_activity(
+    client: AsyncClient,
+    dal: NotificationDataAccessLayer,
+    notification: Notification,
+    user: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """GET is read-only and cannot soft-delete an activity."""
+    await mark_seen(dal, user, session)
+    as_user(user)
+
+    response = await client.get(
+        f"/activities/{notification.id}/clear_notification/"
+    )
+
+    assert response.status_code == 405
+    assert (await client.get("/activities/")).json()["count"] == 3
+    assert await session.get(Notification, notification.id) is not None
+
+
+async def test_get_cannot_soft_delete_all_activities(
+    client: AsyncClient,
+    dal: NotificationDataAccessLayer,
+    notifications: List[Notification],
+    user: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """GET is read-only and cannot clear the activity collection."""
+    await mark_seen(dal, user, session)
+    as_user(user)
+
+    response = await client.get("/activities/clear_activities/")
+
+    assert response.status_code == 405
+    assert (await client.get("/activities/")).json()["count"] == 3
 
 
 async def test_clear_notification_reports_a_missing_activity(
@@ -178,7 +217,8 @@ async def test_clear_notification_reports_a_missing_activity(
     """Clearing something that is not there gives a 404."""
     as_user(user)
 
-    assert (await client.get("/activities/9999/clear_notification/")).status_code == 404
+    response = await client.delete("/activities/9999/clear_notification/")
+    assert response.status_code == 404
 
 
 async def test_clear_activities_soft_deletes_everything(
@@ -193,7 +233,7 @@ async def test_clear_activities_soft_deletes_everything(
     await mark_seen(dal, user, session)
     as_user(user)
 
-    response = await client.get("/activities/clear_activities/")
+    response = await client.delete("/activities/clear_activities/")
 
     assert response.status_code == 204
     assert (await client.get("/activities/")).json()["count"] == 0
@@ -209,8 +249,8 @@ async def test_soft_delete_routes_can_be_switched_off(
     as_user(user)
 
     async with client_factory(API_INCLUDE_SOFT_DELETE=False) as client:
-        assert (await client.get("/activities/clear_activities/")).status_code == 404
-        response = await client.get(
+        assert (await client.delete("/activities/clear_activities/")).status_code == 404
+        response = await client.delete(
             f"/activities/{notification.id}/clear_notification/"
         )
 
@@ -226,8 +266,10 @@ async def test_hard_delete_routes_are_absent_by_default(
     """Permanent deletion is off unless it is asked for."""
     as_user(staff_user)
 
-    assert (await client.get("/activities/delete_activities/")).status_code == 404
-    response = await client.get(f"/activities/{notification.id}/delete_notification/")
+    assert (await client.delete("/activities/delete_activities/")).status_code == 404
+    response = await client.delete(
+        f"/activities/{notification.id}/delete_notification/"
+    )
 
     assert response.status_code == 404
 
@@ -244,7 +286,7 @@ async def test_delete_notification_destroys_it(
     notification_id = notification.id
 
     async with client_factory(API_INCLUDE_HARD_DELETE=True) as client:
-        response = await client.get(
+        response = await client.delete(
             f"/activities/{notification_id}/delete_notification/"
         )
 
@@ -264,7 +306,7 @@ async def test_delete_notification_reports_a_missing_activity(
     as_user(staff_user)
 
     async with client_factory(API_INCLUDE_HARD_DELETE=True) as client:
-        response = await client.get("/activities/9999/delete_notification/")
+        response = await client.delete("/activities/9999/delete_notification/")
 
     assert response.status_code == 404
 
@@ -281,7 +323,7 @@ async def test_delete_activities_destroys_sent_notifications_as_admin(
     notification_ids = [item.id for item in notifications]
 
     async with client_factory(API_INCLUDE_HARD_DELETE=True) as client:
-        response = await client.get("/activities/delete_activities/")
+        response = await client.delete("/activities/delete_activities/")
 
     assert response.status_code == 204
     session.expire_all()
@@ -289,6 +331,29 @@ async def test_delete_activities_destroys_sent_notifications_as_admin(
         await session.get(Notification, item_id) for item_id in notification_ids
     ]
     assert all(item is None for item in remaining)
+
+
+async def test_get_cannot_permanently_delete_notifications(
+    client_factory: Callable[..., AsyncClient],
+    notification: Notification,
+    staff_user: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """GET cannot trigger either administrative deletion operation."""
+    as_user(staff_user)
+    notification_id = notification.id
+
+    async with client_factory(API_INCLUDE_HARD_DELETE=True) as client:
+        single = await client.get(
+            f"/activities/{notification_id}/delete_notification/"
+        )
+        bulk = await client.get("/activities/delete_activities/")
+
+    assert single.status_code == 405
+    assert bulk.status_code == 405
+    session.expire_all()
+    assert await session.get(Notification, notification_id) is not None
 
 
 async def test_hard_delete_is_refused_to_regular_users(
@@ -301,10 +366,10 @@ async def test_hard_delete_is_refused_to_regular_users(
     as_user(user)
 
     async with client_factory(API_INCLUDE_HARD_DELETE=True) as client:
-        single = await client.get(
+        single = await client.delete(
             f"/activities/{notification.id}/delete_notification/"
         )
-        everything = await client.get("/activities/delete_activities/")
+        everything = await client.delete("/activities/delete_activities/")
 
     assert single.status_code == 403
     assert everything.status_code == 403
@@ -320,7 +385,7 @@ async def test_hard_delete_is_refused_to_superuser_without_staff(
     as_user(superuser_only)
 
     async with client_factory(API_INCLUDE_HARD_DELETE=True) as client:
-        response = await client.get(
+        response = await client.delete(
             f"/activities/{notification.id}/delete_notification/"
         )
 

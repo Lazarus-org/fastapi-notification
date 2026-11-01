@@ -3,7 +3,8 @@ API Guide
 
 The package exposes two groups of endpoints. **Notifications** are the things
 you have not seen yet; **Activities** are the history of everything you have.
-Reading a notification moves it from the first group to the second.
+Explicitly marking a notification as seen moves it from the first group to the
+second. Retrieval requests are read-only and never change notification state.
 
 Both groups are mounted by ``create_router()``:
 
@@ -36,14 +37,19 @@ is not registered at all: it returns ``404``, and it does not appear in the
 OpenAPI schema or on the ``/docs`` page. Nothing is registered merely to reject
 every request.
 
-============================================  ==========================================
-Setting                                       Routes it controls
-============================================  ==========================================
-``FASTAPI_NOTIFICATION_API_ALLOW_LIST``       Both listing routes
-``FASTAPI_NOTIFICATION_API_ALLOW_RETRIEVE``   Both retrieval routes
-``FASTAPI_NOTIFICATION_API_INCLUDE_SOFT_DELETE``  Both clearing routes
-``FASTAPI_NOTIFICATION_API_INCLUDE_HARD_DELETE``  Both permanent-deletion routes
-============================================  ==========================================
+.. list-table::
+   :header-rows: 1
+
+   * - Setting
+     - Routes it controls
+   * - ``FASTAPI_NOTIFICATION_API_ALLOW_LIST``
+     - Both listing routes.
+   * - ``FASTAPI_NOTIFICATION_API_ALLOW_RETRIEVE``
+     - Both retrieval routes and the per-notification seen action.
+   * - ``FASTAPI_NOTIFICATION_API_INCLUDE_SOFT_DELETE``
+     - Both soft-delete routes.
+   * - ``FASTAPI_NOTIFICATION_API_INCLUDE_HARD_DELETE``
+     - Both permanent-deletion routes.
 
 Because settings are read when the router is built, call ``configure()`` before
 including the router.
@@ -52,39 +58,65 @@ including the router.
 Notifications API
 -----------------
 
-======  ====================================  ============================================
-Method  Path                                  Description
-======  ====================================  ============================================
-GET     ``/notifications/``                   List the notifications you have not seen.
-GET     ``/notifications/mark_all_as_seen/``  Mark every unseen notification as seen.
-GET     ``/notifications/{notification_id}/`` Retrieve one notification, marking it seen.
-======  ====================================  ============================================
+.. list-table:: Notifications API
+   :header-rows: 1
 
-Retrieving a notification marks it as seen as a side effect, so the same
-notification will not appear in the next listing. Marking a notification as
-seen twice is harmless.
+   * - Method
+     - Path
+     - Description
+   * - GET
+     - ``/notifications/``
+     - List the notifications you have not seen.
+   * - POST
+     - ``/notifications/mark_all_as_seen/``
+     - Mark every unseen notification as seen.
+   * - GET
+     - ``/notifications/{notification_id}/``
+     - Retrieve one unseen notification (read-only).
+   * - POST
+     - ``/notifications/{notification_id}/mark_as_seen/``
+     - Mark one notification as seen.
+
+Retrieving a notification is read-only. Use the explicit POST action to mark
+one notification as seen. Repeating that POST is harmless and returns
+``204 No Content``. The bulk mark-as-seen endpoint also uses POST.
 
 
 Activities API
 --------------
 
-======  ===============================================  =========================================
-Method  Path                                             Description
-======  ===============================================  =========================================
-GET     ``/activities/``                                 List the notifications you have seen.
-GET     ``/activities/clear_activities/``                Soft-delete every activity.
-GET     ``/activities/delete_activities/``               Staff-only global hard delete.
-GET     ``/activities/{notification_id}/``               Retrieve one activity.
-GET     ``/activities/{notification_id}/clear_notification/``   Soft-delete one activity.
-GET     ``/activities/{notification_id}/delete_notification/``  Permanently delete one activity.
-======  ===============================================  =========================================
+.. list-table:: Activities API
+   :header-rows: 1
 
-Soft deletion records that *this* user cleared the notification. The row stays
-in the database and stays visible to its other recipients. Permanent deletion
-destroys the row for everyone, which is why it is restricted to staff and
-switched off by default. The bulk administrative route is intentionally global
-and does not use the staff user's personal activity listing.
+   * - Method
+     - Path
+     - Description
+   * - GET
+     - ``/activities/``
+     - List the notifications you have seen.
+   * - DELETE
+     - ``/activities/clear_activities/``
+     - Soft-delete every activity.
+   * - DELETE
+     - ``/activities/delete_activities/``
+     - Staff-only global hard delete.
+   * - GET
+     - ``/activities/{notification_id}/``
+     - Retrieve one activity (read-only).
+   * - DELETE
+     - ``/activities/{notification_id}/clear_notification/``
+     - Soft-delete one activity.
+   * - DELETE
+     - ``/activities/{notification_id}/delete_notification/``
+     - Permanently delete one activity.
 
+The clearing and deletion operations use DELETE; GET requests never change
+notification state. Soft deletion records that *this* user cleared the
+notification. The row stays in the database and stays visible to its other
+recipients. Permanent deletion destroys the row for everyone, which is why it
+is restricted to staff and switched off by default. The bulk administrative
+route is intentionally global and does not use the staff user's personal
+activity listing.
 
 Example Responses
 -----------------
@@ -169,22 +201,32 @@ Mark all as seen
 
 .. code-block:: bash
 
-   $ curl -H "Authorization: Bearer <token>" \
+   $ curl -X POST -H "Authorization: Bearer <token>" \
        http://localhost:8000/notifications/mark_all_as_seen/
 
 .. code-block:: json
 
    {"detail": "3 Notifications marked as seen."}
 
+Mark one notification as seen
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Retrieval does not mark a notification as seen. Use the explicit POST action:
+
+.. code-block:: bash
+
+   $ curl -i -X POST -H "Authorization: Bearer <token>" \
+       http://localhost:8000/notifications/1/mark_as_seen/
+
 Clear and delete
 ~~~~~~~~~~~~~~~~
 
 The four clearing and deletion routes return ``204 No Content`` with an empty
-body:
+body. Use DELETE for these state-changing operations:
 
 .. code-block:: bash
 
-   $ curl -i -H "Authorization: Bearer <token>" \
+   $ curl -i -X DELETE -H "Authorization: Bearer <token>" \
        http://localhost:8000/activities/1/clear_notification/
 
 .. code-block:: text

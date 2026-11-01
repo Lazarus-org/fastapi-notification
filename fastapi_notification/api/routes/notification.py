@@ -1,6 +1,6 @@
 from typing import Any, Callable, Dict, Optional, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,9 +21,11 @@ class NotificationRoutes(BaseNotificationRoutes):
     - List Notifications: Retrieves a list of unseen notifications. The
       availability of this route is controlled by settings.
     - Retrieve Notification: Fetch detailed information about a specific
-      notification by its ID, marking it as seen. The availability of this route
-      is controlled by settings.
-    - Mark All as Seen: Marks all unseen notifications for the user as seen.
+      unseen notification. Retrieval is read-only.
+    - Mark Notification as Seen: Explicitly mark one notification as seen using
+      POST.
+    - Mark All as Seen: Marks all unseen notifications for the user as seen
+      using POST.
 
     Customizations:
     - Dynamic Serializer: Depending on the user's role or configuration
@@ -137,12 +139,14 @@ def create_notification_router(
             """
             return await routes.list_notifications(request, session, user, filterset)
 
-    @router.get("/mark_all_as_seen/", summary="Mark all notifications as seen")
+    @router.post("/mark_all_as_seen/", summary="Mark all notifications as seen")
     async def mark_all_as_seen(  # type: ignore[misc]
         session: AsyncSession = Depends(session_dep),
         user: Any = Depends(user_dep),
     ) -> Dict[str, str]:
         """Mark every unseen notification for the current user as seen.
+
+        This state-changing action is exposed through POST rather than GET.
 
         Args:
             session (AsyncSession): The database session.
@@ -166,7 +170,7 @@ def create_notification_router(
             user: Any = Depends(user_dep),
             filterset: NotificationFilter = Depends(routes.get_filter_dependency()),
         ) -> Dict[str, Any]:
-            """Retrieve a single notification and mark it as seen.
+            """Retrieve a single unseen notification without changing its state.
 
             Args:
                 notification_id (int): The ID of the notification.
@@ -194,11 +198,55 @@ def create_notification_router(
                     status_code=status.HTTP_404_NOT_FOUND, detail="Not found."
                 )
 
-            data = NotificationSerializer.to_representation(notification)
+            return NotificationSerializer.to_representation(notification)
+
+        @router.post(
+            "/{notification_id:int}/mark_as_seen/",
+            status_code=status.HTTP_204_NO_CONTENT,
+            summary="Mark a notification as seen",
+        )
+        async def mark_notification_as_seen(  # type: ignore[misc]
+            notification_id: int,
+            session: AsyncSession = Depends(session_dep),
+            user: Any = Depends(user_dep),
+        ) -> Response:
+            """Mark one notification as seen by the current user.
+
+            The notification must be sent to the current user or to one of their
+            groups, and must not have been soft-deleted by that user. Repeating
+            the request is harmless.
+
+            Args:
+                notification_id (int): The ID of the notification.
+                session (AsyncSession): The database session.
+                user (Any): The authenticated user.
+
+            Returns:
+                Response: An empty 204 response.
+
+            Raises:
+                HTTPException: With status 404 when the notification does not
+                    exist or is not visible to the user.
+
+            """
+            dal = routes.get_dal(session)
+            groups = await routes.get_user_groups(session, user)
+            statement = dal.sent_statement(
+                recipients=user,
+                exclude_deleted_by=user,
+                groups=groups,
+                display_detail=True,
+            )
+            notification = await dal.get(statement, notification_id)
+
+            if notification is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Not found."
+                )
 
             await notification.mark_as_seen(session, user)
             await session.commit()
 
-            return data
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router

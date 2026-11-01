@@ -306,7 +306,7 @@ class Notification(Base):
         """Mark the notification as seen by a specific user.
 
         Marking a notification as seen more than once is a no-op rather than an
-        error, so repeatedly retrieving a notification stays safe.
+        error, so repeating the explicit mark-as-seen action stays safe.
 
         Args:
             session (AsyncSession): The session used to write.

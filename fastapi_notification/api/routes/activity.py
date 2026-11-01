@@ -25,10 +25,10 @@ class ActivityRoutes(BaseNotificationRoutes):
     - Retrieve Activity: Retrieve detailed information about a specific
       notification by its ID. The availability of this route is controlled by
       settings.
-    - Clear Activities: Soft-delete one or all notifications. Controlled by
-      settings.
-    - Delete Activities: Permanently delete one or all notifications. Restricted
-      to admin users and controlled by settings.
+    - Clear Activities: Soft-delete one or all notifications through DELETE
+      endpoints. Controlled by settings.
+    - Delete Activities: Permanently delete one or all notifications through
+      DELETE endpoints. Restricted to admin users and controlled by settings.
 
     Permissions:
     - Regular Users: Can list, retrieve and clear their own notifications.
@@ -77,10 +77,11 @@ def create_activity_router(
 ) -> APIRouter:
     """Build the activities router.
 
-    The soft delete routes are registered only when
-    ``API_INCLUDE_SOFT_DELETE`` is on, and the hard delete routes only when
-    ``API_INCLUDE_HARD_DELETE`` is on, so a disabled capability leaves no trace
-    in the application or its OpenAPI schema.
+    The soft-delete routes use DELETE and are registered only when
+    ``API_INCLUDE_SOFT_DELETE`` is on. The hard-delete routes also use DELETE
+    and are registered only when ``API_INCLUDE_HARD_DELETE`` is on, so a
+    disabled capability leaves no trace in the application or its OpenAPI
+    schema.
 
     Args:
         session_dependency (Optional[Callable[..., Any]]): Dependency yielding
@@ -136,7 +137,7 @@ def create_activity_router(
 
     if config.include_soft_delete:
 
-        @router.get(
+        @router.delete(
             "/clear_activities/",
             status_code=status.HTTP_204_NO_CONTENT,
             summary="Soft delete all activities",
@@ -145,7 +146,10 @@ def create_activity_router(
             session: AsyncSession = Depends(session_dep),
             user: Any = Depends(user_dep),
         ) -> Response:
-            """Soft delete every notification the current user has seen.
+            """Soft-delete every notification the current user has seen.
+
+            This is a state-changing operation and is therefore exposed through
+            DELETE rather than GET.
 
             Args:
                 session (AsyncSession): The database session.
@@ -162,7 +166,7 @@ def create_activity_router(
 
     if config.include_hard_delete:
 
-        @router.get(
+        @router.delete(
             "/delete_activities/",
             status_code=status.HTTP_204_NO_CONTENT,
             summary="Permanently delete sent notifications (administrative)",
@@ -174,6 +178,9 @@ def create_activity_router(
             filterset: NotificationFilter = Depends(routes.get_filter_dependency()),
         ) -> Response:
             """Permanently delete sent notifications as an administrative action.
+
+            This is a state-changing operation and is therefore exposed through
+            DELETE rather than GET.
 
             This operation is deliberately global rather than scoped to the
             administrator's personal inbox. The route is registered only when
@@ -240,7 +247,7 @@ def create_activity_router(
 
     if config.include_soft_delete:
 
-        @router.get(
+        @router.delete(
             "/{notification_id:int}/clear_notification/",
             status_code=status.HTTP_204_NO_CONTENT,
             summary="Soft delete a notification",
@@ -250,7 +257,10 @@ def create_activity_router(
             session: AsyncSession = Depends(session_dep),
             user: Any = Depends(user_dep),
         ) -> Response:
-            """Soft delete a specific notification for the current user.
+            """Soft-delete a specific notification for the current user.
+
+            This is a state-changing operation and is therefore exposed through
+            DELETE rather than GET.
 
             Args:
                 notification_id (int): The ID of the notification.
@@ -280,7 +290,7 @@ def create_activity_router(
 
     if config.include_hard_delete:
 
-        @router.get(
+        @router.delete(
             "/{notification_id:int}/delete_notification/",
             status_code=status.HTTP_204_NO_CONTENT,
             summary="Permanently delete a notification",
@@ -291,6 +301,9 @@ def create_activity_router(
             user: Any = Depends(admin_dep),
         ) -> Response:
             """Permanently delete a specific notification.
+
+            This is a state-changing operation and is therefore exposed through
+            DELETE rather than GET.
 
             Args:
                 notification_id (int): The ID of the notification.

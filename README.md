@@ -280,22 +280,26 @@ The interactive documentation at `/docs` lists every route the package registere
 
 ## Notifications API
 
-| Method | Path                               | Description                                    |
-|--------|------------------------------------|------------------------------------------------|
-| GET    | `/notifications/`                  | List the notifications you have not seen yet.  |
-| GET    | `/notifications/mark_all_as_seen/` | Mark every unseen notification as seen.        |
-| GET    | `/notifications/{id}/`             | Retrieve one notification, marking it as seen. |
+| Method | Path                                      | Description                                    |
+|--------|-------------------------------------------|------------------------------------------------|
+| GET    | `/notifications/`                        | List the notifications you have not seen yet.  |
+| POST   | `/notifications/mark_all_as_seen/`       | Mark every unseen notification as seen.        |
+| GET    | `/notifications/{id}/`                   | Retrieve one unseen notification (read-only).  |
+| POST   | `/notifications/{id}/mark_as_seen/`      | Mark one notification as seen.                 |
+
+Retrieval is read-only. Use the explicit POST action to mark a notification as
+seen; repeating the action is harmless.
 
 ## Activities API
 
-| Method | Path                                    | Description                                    |
-|--------|-----------------------------------------|------------------------------------------------|
-| GET    | `/activities/`                          | List the notifications you have already seen.  |
-| GET    | `/activities/clear_activities/`         | Soft-delete every activity.                    |
-| GET    | `/activities/delete_activities/`        | Permanently delete every activity. Admin only. |
-| GET    | `/activities/{id}/`                     | Retrieve one activity.                         |
-| GET    | `/activities/{id}/clear_notification/`  | Soft-delete one activity.                      |
-| GET    | `/activities/{id}/delete_notification/` | Permanently delete one activity. Admin only.   |
+| Method | Path                                         | Description                                    |
+|--------|----------------------------------------------|------------------------------------------------|
+| GET    | `/activities/`                               | List the notifications you have already seen.  |
+| DELETE | `/activities/clear_activities/`              | Soft-delete every activity.                    |
+| DELETE | `/activities/delete_activities/`             | Permanently delete every activity. Admin only. |
+| GET    | `/activities/{id}/`                           | Retrieve one activity (read-only).             |
+| DELETE | `/activities/{id}/clear_notification/`       | Soft-delete one activity.                      |
+| DELETE | `/activities/{id}/delete_notification/`      | Permanently delete one activity. Admin only.   |
 
 Routes are registered only when their setting allows it. With `API_INCLUDE_HARD_DELETE` off, for instance, the two delete routes do not exist: they return 404 and never appear in the OpenAPI schema.
 
@@ -434,7 +438,7 @@ Settings resolve in order of precedence: values registered through `configure()`
 | `API_INCLUDE_SOFT_DELETE`          | bool        | `True`                         | Register the clearing routes.                        |
 | `API_INCLUDE_HARD_DELETE`          | bool        | `False`                        | Register the permanent-deletion routes.              |
 | `API_ALLOW_LIST`                   | bool        | `True`                         | Register the listing routes.                         |
-| `API_ALLOW_RETRIEVE`               | bool        | `True`                         | Register the retrieval routes.                       |
+| `API_ALLOW_RETRIEVE`               | bool        | `True`                         | Register retrieval and individual mark-as-seen routes. |
 | `SERIALIZER_INCLUDE_FULL_DETAILS`  | bool        | `False`                        | Give every user the detailed representation.         |
 | `SERIALIZER_EXCLUDE_NULL_FIELDS`   | bool        | `False`                        | Strip null fields from responses.                    |
 | `SERIALIZER_FIELDS`                | list / None | `None`                         | Serve exactly these notification fields.             |
