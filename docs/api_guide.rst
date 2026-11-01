@@ -82,6 +82,9 @@ Notifications API
    * - POST
      - ``/notifications/{notification_id}/mark_as_seen/``
      - Mark one notification as seen.
+   * - POST
+     - ``/notifications/{notification_id}/mark_as_unseen/``
+     - Return one notification to the current user's unseen inbox.
 
 Retrieving a notification is read-only. Use the explicit POST action to mark
 one notification as seen. Repeating that POST is harmless and returns
@@ -273,6 +276,19 @@ Retrieval does not mark a notification as seen. Use the explicit POST action:
 
    $ curl -i -X POST -H "Authorization: Bearer <token>" \
        http://localhost:8000/notifications/1/mark_as_seen/
+
+Mark one notification as unseen
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use the explicit POST action to remove only the authenticated user's seen
+record. Other recipients' read state is unchanged. Repeating the request is
+harmless and returns ``204 No Content``. A notification cleared by the current
+user is not restored by this action.
+
+.. code-block:: bash
+
+   $ curl -i -X POST -H "Authorization: Bearer <token>" \
+       http://localhost:8000/notifications/1/mark_as_unseen/
 
 Clear and delete
 ~~~~~~~~~~~~~~~~

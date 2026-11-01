@@ -46,6 +46,9 @@ def test_openapi_documents_state_changes_with_write_methods() -> None:
     assert set(paths["/notifications/{notification_id}/mark_as_seen/"]) == {
         "post"
     }
+    assert set(paths["/notifications/{notification_id}/mark_as_unseen/"]) == {
+        "post"
+    }
     assert set(paths["/activities/clear_activities/"]) == {"delete"}
     assert set(paths["/activities/delete_activities/"]) == {"delete"}
     assert set(

@@ -101,6 +101,36 @@ async def test_concurrent_mark_as_seen_creates_one_record(
     assert await _count_state_rows(factory, NotificationSeen, notification_id) == 1
 
 
+async def test_concurrent_mark_as_unseen_is_idempotent(
+    concurrency_store: Tuple[async_sessionmaker, int, int],
+) -> None:
+    """Independent sessions can safely retry removal of one seen record."""
+    factory, user_id, notification_id = concurrency_store
+
+    async with factory() as session:
+        user = await session.get(User, user_id)
+        notification = await session.get(Notification, notification_id)
+        assert user is not None
+        assert notification is not None
+        await notification.mark_as_seen(session, user)
+        await session.commit()
+
+    async def mark_unseen() -> bool:
+        async with factory() as session:
+            user = await session.get(User, user_id)
+            notification = await session.get(Notification, notification_id)
+            assert user is not None
+            assert notification is not None
+            changed = await notification.mark_as_unseen(session, user)
+            await session.commit()
+            return changed
+
+    results = await asyncio.gather(*(mark_unseen() for _ in range(8)))
+
+    assert sum(results) == 1
+    assert await _count_state_rows(factory, NotificationSeen, notification_id) == 0
+
+
 async def test_concurrent_create_seen_returns_one_persisted_record(
     concurrency_store: Tuple[async_sessionmaker, int, int],
 ) -> None:

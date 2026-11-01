@@ -330,6 +330,19 @@ is avoided, so it is safe to call repeatedly.
    marked = await dal.mark_all_as_seen(bob)
    await session.commit()
 
+``Notification.mark_as_unseen(session, user)`` removes only that user's seen
+record from a notification and returns ``True`` when a record was removed.
+Calling it when the notification is already unseen returns ``False``. The user
+must still be a direct recipient or a current member of a targeted group, the
+notification must have been sent, and the user must not have cleared it.
+
+.. code-block:: python
+
+   notification = await session.get(Notification, 42)
+   if notification is not None:
+       changed = await notification.mark_as_unseen(session, bob)
+       await session.commit()
+
 ``mark_all_as_sent(recipients=None, groups=None)`` flips every matching unsent
 notification to sent and returns how many were updated. With no filters, it
 marks every unsent notification.
@@ -471,7 +484,8 @@ The package ships its own SQLAlchemy models on a declarative ``Base``:
     A record that a user has seen a notification, with the time it happened.
     Created through ``NotificationSeen.create()`` or
     ``Notification.mark_as_seen()``, both of which check the user's permission
-    first.
+    first. ``Notification.mark_as_unseen()`` removes only the current user's
+    record after checking audience access and per-user soft-deletion state.
 
 ``DeletedNotification``
     A record that a user has soft deleted a notification, with the time it

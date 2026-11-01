@@ -9,6 +9,8 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    delete,
+    exists,
     select,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +27,7 @@ from fastapi_notification.models.content_type import (
     normalize_object_id,
     register_content_model,
 )
+from fastapi_notification.models.deleted_notification import DeletedNotification
 from fastapi_notification.models.helper.enums.status_choices import NotificationStatus
 from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.models.permissions.notification_permission import (
@@ -354,3 +357,78 @@ class Notification(Base):
         ):
             current_seen.append(user)
             self.seen_by = current_seen
+
+    async def mark_as_unseen(self, session: AsyncSession, user: Any) -> bool:
+        """Remove the current user's seen state from this notification.
+
+        The operation is idempotent: if the user has not seen the notification,
+        it does nothing. It only removes the state row belonging to ``user``;
+        other recipients' seen state is never affected.
+
+        The notification must be sent, addressed to the user directly or through
+        one of their current groups, and not soft-deleted by that user. The
+        database DELETE is atomic, so concurrent retries are safe. The caller
+        retains ownership of the surrounding transaction.
+
+        Args:
+            session (AsyncSession): The session used to write.
+            user (Any): The recipient whose seen state should be removed.
+
+        Returns:
+            bool: ``True`` when a seen record was removed, otherwise ``False``.
+
+        Raises:
+            PermissionError: If the user is not an authorized recipient, the
+                notification has not been sent, or the user has cleared it.
+        """
+        await NotificationPermission(self).validate_permission_async(
+            session, user, "mark as unseen"
+        )
+
+        if not self.is_sent:
+            raise PermissionError("An unsent notification cannot be marked as unseen.")
+
+        user_id = get_identity_adapter().get_user_id(user)
+        deleted_result = await session.execute(
+            select(DeletedNotification.id).where(
+                DeletedNotification.notification_id == self.id,
+                DeletedNotification.user_id == user_id,
+            )
+        )
+        if deleted_result.scalar_one_or_none() is not None:
+            raise PermissionError(
+                "A cleared notification cannot be marked as unseen."
+            )
+
+        # Repeat the sent/cleared conditions in the DELETE itself. This closes
+        # the race where a concurrent request clears the notification after
+        # the checks above but before this state transition is executed.
+        still_visible = select(Notification.id).where(
+            Notification.id == self.id,
+            Notification.is_sent.is_(True),
+            ~exists(
+                select(DeletedNotification.id).where(
+                    DeletedNotification.notification_id == self.id,
+                    DeletedNotification.user_id == user_id,
+                )
+            ),
+        )
+        result = await session.execute(
+            delete(NotificationSeen).where(
+                NotificationSeen.notification_id == self.id,
+                NotificationSeen.user_id == user_id,
+                NotificationSeen.notification_id.in_(still_visible),
+            )
+        )
+        removed = (result.rowcount or 0) > 0
+
+        # Keep an already-hydrated projection in sync without forcing an
+        # identity lookup when the projection has not been loaded.
+        if "_seen_by_identities" in self.__dict__:
+            self.seen_by = [
+                identity
+                for identity in self.seen_by
+                if get_identity_adapter().get_user_id(identity) != user_id
+            ]
+
+        return removed

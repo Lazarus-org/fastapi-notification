@@ -288,6 +288,7 @@ The interactive documentation at `/docs` lists every route the package registere
 | POST   | `/notifications/mark_all_as_seen/`       | Mark every unseen notification as seen.        |
 | GET    | `/notifications/{id}/`                   | Retrieve one unseen notification (read-only).  |
 | POST   | `/notifications/{id}/mark_as_seen/`      | Mark one notification as seen.                 |
+| POST   | `/notifications/{id}/mark_as_unseen/`    | Return one notification to the unseen inbox.   |
 
 Retrieval, summary and preview are read-only. The summary counts sent
 notifications addressed to the current user or their groups, excluding items
@@ -296,7 +297,10 @@ preview returns the most recent visible notifications (5 by default, at most
 20), including an ``is_seen`` flag for each item. Both endpoints honor inbox
 filter conditions; preview is always ordered newest first. Use the explicit
 POST action to mark a notification as seen;
-repeating the action is harmless.
+repeating the action is harmless. Use ``POST /notifications/{id}/mark_as_unseen/``
+to remove only the current user's seen state and return the notification to
+their unseen inbox. The operation is idempotent, does not affect other
+recipients, and cannot restore an item that the user has cleared.
 
 ## Activities API
 

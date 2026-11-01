@@ -13,6 +13,12 @@ Idempotent state transitions
 or preserves the existing state record rather than raising a duplicate-key
 error. The original ``seen_at`` or ``deleted_at`` timestamp is retained.
 
+``Notification.mark_as_unseen()`` performs a user-scoped atomic ``DELETE`` of
+the matching seen row. Concurrent retries are safe: at most one request removes
+the row, while subsequent requests are successful no-ops. The operation never
+deletes another recipient's seen row and does not restore notifications that
+the user has soft-deleted.
+
 Bulk ``mark_all_as_seen()`` and ``clear_all()`` operations use an atomic
 ``INSERT ... SELECT ... ON CONFLICT DO NOTHING`` statement on SQLite and
 PostgreSQL. Other SQLAlchemy dialects use savepoints and the same unique

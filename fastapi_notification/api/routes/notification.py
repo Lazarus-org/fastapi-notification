@@ -333,4 +333,59 @@ def create_notification_router(
 
             return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+        @router.post(
+            "/{notification_id:int}/mark_as_unseen/",
+            status_code=status.HTTP_204_NO_CONTENT,
+            summary="Mark a notification as unseen",
+        )
+        async def mark_notification_as_unseen(  # type: ignore[misc]
+            notification_id: int,
+            session: AsyncSession = Depends(session_dep),
+            user: Any = Depends(user_dep),
+        ) -> Response:
+            """Remove the current user's seen state from one notification.
+
+            The notification must be sent to the current user or to one of
+            their groups, and must not have been cleared by that user. Repeating
+            the request is harmless. Other recipients' read state is unchanged.
+
+            Args:
+                notification_id (int): The notification ID.
+                session (AsyncSession): The database session.
+                user (Any): The authenticated user.
+
+            Returns:
+                Response: An empty 204 response.
+
+            Raises:
+                HTTPException: With status 404 when the notification does not
+                    exist or is not visible to the user.
+            """
+            dal = routes.get_dal(session)
+            groups = await routes.get_user_groups(session, user)
+            statement = dal.sent_statement(
+                recipients=user,
+                exclude_deleted_by=user,
+                groups=groups,
+                display_detail=True,
+            )
+            notification = await dal.get(statement, notification_id)
+
+            if notification is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Not found."
+                )
+
+            try:
+                await notification.mark_as_unseen(session, user)
+            except PermissionError:
+                # Membership or per-user deletion may have changed after the
+                # scoped lookup. Keep the endpoint's non-disclosing 404 policy.
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Not found."
+                ) from None
+
+            await session.commit()
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     return router
