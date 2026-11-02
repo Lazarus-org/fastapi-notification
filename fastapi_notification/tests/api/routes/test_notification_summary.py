@@ -41,7 +41,90 @@ async def test_summary_counts_total_unread_and_read(
     response = await client.get("/notifications/summary/")
 
     assert response.status_code == 200
-    assert response.json() == {"total": 2, "unread": 1, "read": 1}
+    assert response.json() == {
+        "total": 2,
+        "unread": 1,
+        "read": 1,
+        "by_category": {"general": {"total": 2, "unread": 1, "read": 1}},
+        "by_priority": {"normal": {"total": 2, "unread": 1, "read": 1}},
+    }
+
+
+async def test_summary_breaks_counts_down_by_category_and_priority(
+    client: AsyncClient,
+    dal: NotificationDataAccessLayer,
+    user: User,
+    session: AsyncSession,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Summary dimensions retain independent total/read/unread counts."""
+    order_read = await dal.create_notification(
+        verb="paid order",
+        actor=user,
+        recipients=user,
+        category="orders",
+        priority="normal",
+        is_sent=True,
+    )
+    await dal.create_notification(
+        verb="urgent order",
+        actor=user,
+        recipients=user,
+        category="orders",
+        priority="urgent",
+        is_sent=True,
+    )
+    await dal.create_notification(
+        verb="social update",
+        actor=user,
+        recipients=user,
+        category="social",
+        priority="low",
+        is_sent=True,
+    )
+    await dal.create_notification(
+        verb="security alert",
+        actor=user,
+        recipients=user,
+        category="security",
+        priority="high",
+        is_sent=True,
+    )
+    await order_read.mark_as_seen(session, user)
+    await session.commit()
+    as_user(user)
+
+    response = await client.get("/notifications/summary/")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total": 4,
+        "unread": 3,
+        "read": 1,
+        "by_category": {
+            "orders": {"total": 2, "unread": 1, "read": 1},
+            "social": {"total": 1, "unread": 1, "read": 0},
+            "security": {"total": 1, "unread": 1, "read": 0},
+        },
+        "by_priority": {
+            "normal": {"total": 1, "unread": 0, "read": 1},
+            "urgent": {"total": 1, "unread": 1, "read": 0},
+            "low": {"total": 1, "unread": 1, "read": 0},
+            "high": {"total": 1, "unread": 1, "read": 0},
+        },
+    }
+
+    filtered = await client.get(
+        "/notifications/summary/?category=orders&priority=urgent"
+    )
+    assert filtered.status_code == 200
+    assert filtered.json() == {
+        "total": 1,
+        "unread": 1,
+        "read": 0,
+        "by_category": {"orders": {"total": 1, "unread": 1, "read": 0}},
+        "by_priority": {"urgent": {"total": 1, "unread": 1, "read": 0}},
+    }
 
 
 async def test_summary_includes_group_notifications(
@@ -61,13 +144,25 @@ async def test_summary_includes_group_notifications(
     as_user(group_user)
 
     unread = await client.get("/notifications/summary/")
-    assert unread.json() == {"total": 1, "unread": 1, "read": 0}
+    assert unread.json() == {
+        "total": 1,
+        "unread": 1,
+        "read": 0,
+        "by_category": {"general": {"total": 1, "unread": 1, "read": 0}},
+        "by_priority": {"normal": {"total": 1, "unread": 1, "read": 0}},
+    }
 
     await notification.mark_as_seen(session, group_user)
     await session.commit()
 
     read = await client.get("/notifications/summary/")
-    assert read.json() == {"total": 1, "unread": 0, "read": 1}
+    assert read.json() == {
+        "total": 1,
+        "unread": 0,
+        "read": 1,
+        "by_category": {"general": {"total": 1, "unread": 0, "read": 1}},
+        "by_priority": {"normal": {"total": 1, "unread": 0, "read": 1}},
+    }
 
 
 async def test_summary_does_not_double_count_direct_and_group_audience(
@@ -93,7 +188,13 @@ async def test_summary_does_not_double_count_direct_and_group_audience(
     response = await client.get("/notifications/summary/")
 
     assert response.status_code == 200
-    assert response.json() == {"total": 1, "unread": 1, "read": 0}
+    assert response.json() == {
+        "total": 1,
+        "unread": 1,
+        "read": 0,
+        "by_category": {"general": {"total": 1, "unread": 1, "read": 0}},
+        "by_priority": {"normal": {"total": 1, "unread": 1, "read": 0}},
+    }
 
 
 async def test_summary_excludes_unsent_and_other_users_notifications(
@@ -120,7 +221,13 @@ async def test_summary_excludes_unsent_and_other_users_notifications(
     response = await client.get("/notifications/summary/")
 
     assert response.status_code == 200
-    assert response.json() == {"total": 1, "unread": 1, "read": 0}
+    assert response.json() == {
+        "total": 1,
+        "unread": 1,
+        "read": 0,
+        "by_category": {"general": {"total": 1, "unread": 1, "read": 0}},
+        "by_priority": {"normal": {"total": 1, "unread": 1, "read": 0}},
+    }
 
 
 async def test_summary_honours_notification_filters(
@@ -143,7 +250,13 @@ async def test_summary_honours_notification_filters(
     response = await client.get("/notifications/summary/?status=CRITICAL")
 
     assert response.status_code == 200
-    assert response.json() == {"total": 1, "unread": 1, "read": 0}
+    assert response.json() == {
+        "total": 1,
+        "unread": 1,
+        "read": 0,
+        "by_category": {"general": {"total": 1, "unread": 1, "read": 0}},
+        "by_priority": {"normal": {"total": 1, "unread": 1, "read": 0}},
+    }
 
 
 async def test_preview_returns_recent_read_and_unread_items(
@@ -176,11 +289,55 @@ async def test_preview_returns_recent_read_and_unread_items(
         "title",
         "description",
         "status",
+        "category",
+        "priority",
         "link",
         "timestamp",
         "expires_at",
         "is_seen",
     }
+
+
+async def test_preview_includes_category_and_priority(
+    client: AsyncClient,
+    dal: NotificationDataAccessLayer,
+    user: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Preview exposes taxonomy values without changing notification status."""
+    await dal.create_notification(
+        verb="payment failed",
+        actor=user,
+        recipients=user,
+        status="ERROR",
+        category="financial",
+        priority="urgent",
+        is_sent=True,
+    )
+    as_user(user)
+
+    response = await client.get("/notifications/preview/")
+
+    assert response.status_code == 200
+    item = response.json()["results"][0]
+    assert item["status"] == "ERROR"
+    assert item["category"] == "financial"
+    assert item["priority"] == "urgent"
+
+
+async def test_taxonomy_filters_reject_invalid_query_values(
+    client: AsyncClient,
+    user: User,
+    as_user: Callable[[Any], None],
+) -> None:
+    """Invalid category and priority query values are rejected as 422."""
+    as_user(user)
+
+    invalid_category = await client.get("/notifications/?category=bad%20category")
+    invalid_priority = await client.get("/notifications/?priority=immediate")
+
+    assert invalid_category.status_code == 422
+    assert invalid_priority.status_code == 422
 
 
 async def test_preview_is_bounded_and_validates_limit(
@@ -293,7 +450,13 @@ async def test_staff_receives_only_their_own_summary_and_preview(
     summary = await client.get("/notifications/summary/")
     preview = await client.get("/notifications/preview/")
 
-    assert summary.json() == {"total": 0, "unread": 0, "read": 0}
+    assert summary.json() == {
+        "total": 0,
+        "unread": 0,
+        "read": 0,
+        "by_category": {},
+        "by_priority": {},
+    }
     assert preview.json() == {"results": []}
 
 
@@ -309,7 +472,13 @@ async def test_superuser_receives_only_their_own_summary_and_preview(
     summary = await client.get("/notifications/summary/")
     preview = await client.get("/notifications/preview/")
 
-    assert summary.json() == {"total": 0, "unread": 0, "read": 0}
+    assert summary.json() == {
+        "total": 0,
+        "unread": 0,
+        "read": 0,
+        "by_category": {},
+        "by_priority": {},
+    }
     assert preview.json() == {"results": []}
 
 

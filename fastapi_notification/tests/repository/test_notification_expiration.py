@@ -152,12 +152,23 @@ async def test_expired_direct_and_group_notifications_are_hidden_everywhere() ->
 
             summary = await dal.summary(visible_statement, user)
             preview = await dal.preview(visible_statement, user, limit=5)
-            assert summary == {"total": 2, "unread": 1, "read": 1}
+            assert summary == {
+                "total": 2,
+                "unread": 1,
+                "read": 1,
+                "by_category": {
+                    "general": {"total": 2, "unread": 1, "read": 1}
+                },
+                "by_priority": {
+                    "normal": {"total": 2, "unread": 1, "read": 1}
+                },
+            }
             assert {row["id"] for row in preview} == {
                 notifications[2].id,
                 notifications[3].id,
             }
             assert all("expires_at" in row for row in preview)
+            assert all("category" in row and "priority" in row for row in preview)
 
             # Raw/all queries deliberately retain expired records for audit.
             raw = dal.all_notifications_statement(display_detail=True)

@@ -26,7 +26,7 @@ here: ``configure()`` adds it for you, so ``API_ALLOW_LIST`` and
 
    configure(
        API_INCLUDE_HARD_DELETE=True,
-       API_ORDERING_FIELDS=["id", "timestamp"],
+       API_ORDERING_FIELDS=["id", "timestamp", "category", "priority"],
    )
 
 The same settings through the environment, where the prefix is required:
@@ -34,7 +34,7 @@ The same settings through the environment, where the prefix is required:
 .. code-block:: bash
 
    export FASTAPI_NOTIFICATION_API_INCLUDE_HARD_DELETE=true
-   export FASTAPI_NOTIFICATION_API_ORDERING_FIELDS='["id", "timestamp"]'
+   export FASTAPI_NOTIFICATION_API_ORDERING_FIELDS='["id", "timestamp", "category", "priority"]'
 
 ``configure()`` rebuilds the active configuration and returns it. To discard
 every value you registered and fall back to the environment and the defaults,
@@ -91,7 +91,7 @@ Example Configuration
        USER_SERIALIZER_CLASS="myapp.serializers.CompactUserSerializer",
        AUTHENTICATED_USER_THROTTLE_RATE="60/minute",
        STAFF_USER_THROTTLE_RATE="200/minute",
-       API_ORDERING_FIELDS=["id", "timestamp"],
+       API_ORDERING_FIELDS=["id", "timestamp", "category", "priority"],
        API_SEARCH_FIELDS=["verb", "description"],
        API_EXTRA_PERMISSION_CLASS="myapp.permissions.IsNotificationAdmin",
    )
@@ -293,7 +293,7 @@ the packaged ``NotificationFilter`` is used.
 API_ORDERING_FIELDS
 ~~~~~~~~~~~~~~~~~~~
 
-**Type:** ``List[str]`` — **Default:** ``["id", "timestamp", "public"]``
+**Type:** ``List[str]`` — **Default:** ``["id", "timestamp", "public", "category", "priority"]``
 
 The notification fields a client may order listings by. An ordering request
 naming a field outside this list is ignored. The list must not be empty.

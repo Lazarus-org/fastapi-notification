@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List, Optional
 
 from sqlalchemy import (
+    CheckConstraint,
     JSON,
     Boolean,
     DateTime,
@@ -28,7 +29,11 @@ from fastapi_notification.models.content_type import (
     register_content_model,
 )
 from fastapi_notification.models.deleted_notification import DeletedNotification
-from fastapi_notification.models.helper.enums.status_choices import NotificationStatus
+from fastapi_notification.models.helper.enums import (
+    NotificationStatus,
+    normalize_category,
+    normalize_priority,
+)
 from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
@@ -52,6 +57,8 @@ class Notification(Base):
         verb (str): The action verb associated with the notification.
         description (Optional[str]): A description of the notification.
         status (str): The current status of the notification.
+        category (str): Built-in or application-defined category key.
+        priority (str): Urgency level: low, normal, high or urgent.
         actor_content_type_id (int): Content type of the actor initiating the action.
         actor_object_id (str): Text-normalized ID of the actor object.
         target_content_type_id (Optional[int]): Content type of the target object.
@@ -69,6 +76,12 @@ class Notification(Base):
     """
 
     __tablename__ = "notification"
+    __table_args__ = (
+        CheckConstraint(
+            "priority IN ('low', 'normal', 'high', 'urgent')",
+            name="ck_notification_priority",
+        ),
+    )
     __serializable_identity_fields__: ClassVar[tuple[str, ...]] = (
         "recipient",
         "group",
@@ -98,6 +111,27 @@ class Notification(Base):
         comment=(
             "Indicates the notification's current status, such as 'info', 'error',"
             " or 'warning'."
+        ),
+    )
+    category: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="general",
+        server_default="general",
+        index=True,
+        comment=(
+            "A lowercase category key used to group notifications. Applications "
+            "may use built-in or custom namespaced categories."
+        ),
+    )
+    priority: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="normal",
+        server_default="normal",
+        index=True,
+        comment=(
+            "The urgency of the notification: low, normal, high or urgent."
         ),
     )
     actor_content_type_id: Mapped[int] = mapped_column(
@@ -252,6 +286,18 @@ class Notification(Base):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("expires_at must be timezone-aware.")
         return value.astimezone(timezone.utc)
+
+    @validates("category")
+    def _validate_category(self, key: str, value: Any) -> str:
+        """Normalize and validate built-in or application-defined categories."""
+        del key
+        return normalize_category(value)
+
+    @validates("priority")
+    def _validate_priority(self, key: str, value: Any) -> str:
+        """Normalize and validate notification priority."""
+        del key
+        return normalize_priority(value)
 
     def is_expired(self, at: Optional[datetime] = None) -> bool:
         """Return whether the notification has expired at the supplied instant.

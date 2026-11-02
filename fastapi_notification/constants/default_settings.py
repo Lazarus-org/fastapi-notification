@@ -6,7 +6,14 @@ from typing import List, Optional
 class DefaultSerializerSettings:
     notification_serializer_fields: Optional[List[str]] = field(
         default_factory=lambda: [
-            "id", "description", "status", "link", "timestamp", "expires_at"
+            "id",
+            "description",
+            "status",
+            "category",
+            "priority",
+            "link",
+            "timestamp",
+            "expires_at",
         ]
     )
     notification_serializer_class: Optional[str] = None
@@ -33,7 +40,9 @@ class DefaultPaginationAndFilteringSettings:
     )
     filterset_class: Optional[str] = None
     ordering_fields: List[str] = field(
-        default_factory=lambda: ["id", "timestamp", "public"]
+        default_factory=lambda: [
+            "id", "timestamp", "public", "category", "priority"
+        ]
     )
     search_fields: List[str] = field(default_factory=lambda: ["verb", "description"])
 

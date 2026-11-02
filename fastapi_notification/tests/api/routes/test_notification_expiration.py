@@ -52,7 +52,13 @@ async def test_expired_direct_notifications_are_hidden_from_inbox_summary_and_pr
 
     assert inbox.status_code == 200
     assert [row["id"] for row in inbox.json()["results"]] == [active.id]
-    assert summary.json() == {"total": 1, "unread": 1, "read": 0}
+    assert summary.json() == {
+        "total": 1,
+        "unread": 1,
+        "read": 0,
+        "by_category": {"general": {"total": 1, "unread": 1, "read": 0}},
+        "by_priority": {"normal": {"total": 1, "unread": 1, "read": 0}},
+    }
     assert [row["id"] for row in preview.json()["results"]] == [active.id]
     assert preview.json()["results"][0]["expires_at"] is not None
 
@@ -103,7 +109,13 @@ async def test_expiration_is_applied_to_group_recipients_and_activity_history(
 
     assert [row["id"] for row in inbox.json()["results"]] == []
     assert [row["id"] for row in activities.json()["results"]] == [active.id]
-    assert summary.json() == {"total": 1, "unread": 0, "read": 1}
+    assert summary.json() == {
+        "total": 1,
+        "unread": 0,
+        "read": 1,
+        "by_category": {"general": {"total": 1, "unread": 0, "read": 1}},
+        "by_priority": {"normal": {"total": 1, "unread": 0, "read": 1}},
+    }
 
 
 async def test_expired_notifications_remain_in_database_until_explicit_cleanup(

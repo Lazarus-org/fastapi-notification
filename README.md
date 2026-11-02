@@ -18,6 +18,7 @@ It is built on async SQLAlchemy 2.0 and Pydantic v2, and it is the FastAPI count
 
 - **Notification inbox and activity history** — unseen notifications, seen activity, aggregate read/unread counts, and a bounded recent preview.
 - **Notification expiration** — optional timezone-aware expiry with explicit, retention-controlled cleanup.
+- **Structured notification taxonomy** — independent status, category and priority fields; built-in categories can be extended with application-defined keys.
 - **Idempotent notification creation** — optional scoped deduplication keys
   prevent duplicate notifications from retried jobs, callbacks and event
   consumers; expired keys can be safely reused.
@@ -228,6 +229,8 @@ async with Session() as session:
         recipients=[other_user],
         groups=[moderators],
         status="INFO",
+        category="orders",
+        priority="high",
         public=True,
         target=post,
         link="https://example.com/posts/123",
@@ -242,6 +245,18 @@ async with Session() as session:
 Only `verb` and `actor` are required. With no `description`, one is generated from the actor, the verb, and the target or action object.
 
 A notification is only visible to its recipients once `is_sent` is true. Create it unsent and call `mark_all_as_sent()` later if you want to stage delivery.
+
+## Categories and Priorities
+
+`status`, `category` and `priority` describe different things:
+
+- `status` describes the notification's state or nature (`INFO`, `WARNING`, `ERROR`, etc.).
+- `category` groups notifications by application domain. Built-in keys are `general`, `system`, `security`, `social`, `financial`, `orders` and `marketing`; custom lowercase keys such as `com.example.billing` are also supported. The default is `general`.
+- `priority` describes urgency and accepts `low`, `normal`, `high` or `urgent`. The default is `normal`.
+
+Priority is not inferred from status. For example, an `ERROR` notification can have `normal` priority, while an `INFO` notification can be `urgent` if the application requires immediate attention.
+
+Filter inboxes with `category` and `priority`, for example `/notifications/?category=orders&priority=urgent`. To sort by urgency, use `ordering=-priority`; equal priorities are ordered newest first. The summary endpoint also returns `by_category` and `by_priority` breakdowns, each split into `total`, `unread` and `read` counts. Preview items include both fields.
 
 Any object can be the `actor`, `target` or `action_object`, as long as its model is registered:
 
@@ -272,8 +287,11 @@ $ curl -H "Authorization: Bearer <token>" http://localhost:8000/notifications/
       "id": 1,
       "description": "alice liked your post my-first-post",
       "status": "INFO",
+      "category": "orders",
+      "priority": "high",
       "link": "https://example.com/posts/123",
-      "timestamp": "2026-07-20T12:00:00Z"
+      "timestamp": "2026-07-20T12:00:00Z",
+      "expires_at": null
     }
   ]
 }
@@ -299,9 +317,11 @@ The interactive documentation at `/docs` lists every route the package registere
 
 Retrieval, summary and preview are read-only. The summary counts sent
 notifications addressed to the current user or their groups, excluding items
-the user has cleared. It returns ``total``, ``unread`` and ``read`` counts. The
-preview returns the most recent visible notifications (5 by default, at most
-20), including an ``is_seen`` flag and nullable ``expires_at`` for each item.
+the user has cleared. It returns ``total``, ``unread`` and ``read`` counts plus
+``by_category`` and ``by_priority`` breakdowns with the same three counts for
+each key. The preview returns the most recent visible notifications (5 by
+default, at most 20), including ``status``, ``category``, ``priority``, an
+``is_seen`` flag and nullable ``expires_at`` for each item.
 Both endpoints honor inbox
 filter conditions; preview is always ordered newest first. Use the explicit
 POST action to mark a notification as seen;
@@ -349,7 +369,9 @@ Listings are wrapped in an envelope and paged with `limit` and `offset`:
 | `timestamp_after`  | Only notifications at or after this time.                        |
 | `timestamp_before` | Only notifications at or before this time.                       |
 | `search`           | Case-insensitive match across `API_SEARCH_FIELDS`.               |
-| `ordering`         | Order by a field in `API_ORDERING_FIELDS`; prefix `-` to reverse. |
+| `category`         | Filter by a built-in or custom category key. |
+| `priority`         | Filter by `low`, `normal`, `high` or `urgent`. |
+| `ordering`         | Order by a field in `API_ORDERING_FIELDS`; prefix `-` to reverse. Use `-priority` for urgent-first ordering. |
 
 Ordering is restricted to the configured fields, so a client cannot sort by an arbitrary column.
 
@@ -512,7 +534,7 @@ Settings resolve in order of precedence: values registered through `configure()`
 | `API_PAGINATION_CLASS`             | str / None  | `DefaultLimitOffSetPagination` | Paginator; `None` returns bare lists.                |
 | `API_EXTRA_PERMISSION_CLASS`       | str / None  | `None`                         | Extra permission applied to every route.             |
 | `API_FILTERSET_CLASS`              | str / None  | `None`                         | Replace the filter set.                              |
-| `API_ORDERING_FIELDS`              | list        | `["id", "timestamp", "public"]` | Fields a client may order by.                       |
+| `API_ORDERING_FIELDS`              | list        | `["id", "timestamp", "public", "category", "priority"]` | Fields a client may order by.                       |
 | `API_SEARCH_FIELDS`                | list        | `["verb", "description"]`      | Fields the `search` parameter matches against.       |
 
 Settings are validated when a router is built. Anything wrong raises `ImproperlyConfigured`, listing every problem at once:

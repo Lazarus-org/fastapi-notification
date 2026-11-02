@@ -93,7 +93,16 @@ async def test_summary_rows_carry_only_the_default_fields(
     """Without detail, rows are plain mappings of the summary columns."""
     rows = await dal.sent(recipients=user)
 
-    assert set(rows[0]) == {"id", "description", "status", "link", "timestamp"}
+    assert set(rows[0]) == {
+        "id",
+        "description",
+        "status",
+        "category",
+        "priority",
+        "link",
+        "timestamp",
+        "expires_at",
+    }
 
 
 async def test_all_notifications_can_be_narrowed(

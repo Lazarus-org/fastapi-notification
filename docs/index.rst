@@ -102,6 +102,7 @@ The documentation is organized into the following sections:
    quick_start
    api_guide
    usage
+   taxonomy
    concurrency
    settings
    identity

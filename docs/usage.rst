@@ -74,6 +74,8 @@ recipients and groups given.
        recipients=[bob, carol],
        groups=[moderators],
        status="INFO",
+       category="orders",
+       priority="high",
        public=True,
        target=post,
        action_object=comment,
@@ -106,7 +108,17 @@ Only ``verb`` and ``actor`` are required. The parameters are:
     The groups the notification is addressed to. Both may be given.
 
 ``status`` (``str``, default ``"INFO"``)
-    One of the ``NotificationStatus`` values.
+    One of the ``NotificationStatus`` values. Describes the notification's
+    nature or state; it is independent of urgency.
+
+``category`` (``str``, default ``"general"``)
+    A lowercase category key. Built-ins are ``general``, ``system``, ``security``,
+    ``social``, ``financial``, ``orders`` and ``marketing``. Applications may
+    use custom namespaced keys such as ``com.example.billing``.
+
+``priority`` (``str``, default ``"normal"``)
+    One of ``low``, ``normal``, ``high`` or ``urgent``. Priority describes
+    urgency and is not inferred from ``status``.
 
 ``public`` (``bool``, default ``True``)
     Whether the notification is publicly visible.
@@ -394,14 +406,16 @@ Every read method takes ``display_detail``, which decides what comes back:
 
 - ``False`` (the default, except on ``deleted``) selects only the summary
   columns and returns a list of plain dictionaries — ``id``, ``description``,
-  ``status``, ``link`` and ``timestamp``.
+  ``status``, ``category``, ``priority``, ``link``, ``timestamp`` and
+  ``expires_at``.
 - ``True`` selects whole rows and returns a list of ``Notification`` instances,
   with their relationships and generic relations available.
 
 .. code-block:: python
 
    compact = await dal.unseen(unseen_by=bob)
-   # [{"id": 1, "description": "...", "status": "INFO", "link": None, "timestamp": ...}]
+   # [{"id": 1, "description": "...", "status": "INFO", "category": "general",
+   #   "priority": "normal", "link": None, "timestamp": ...}]
 
    full = await dal.unseen(unseen_by=bob, display_detail=True)
    # [<Notification ...>]
@@ -667,3 +681,13 @@ The available values are:
 ``NotificationStatus.values()`` returns every value, and
 ``NotificationStatus.choices()`` returns ``(value, label)`` pairs with the
 human readable description of each.
+
+Notification categories and priorities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``NotificationCategory`` exposes the built-in category keys, while custom
+category keys are accepted without requiring a central registry. Keys are
+trimmed, lowercased and validated. ``NotificationPriority`` provides the four
+supported urgency levels. Both enums are importable from
+``fastapi_notification``. See :doc:`taxonomy` for filtering, ordering and summary
+breakdowns.

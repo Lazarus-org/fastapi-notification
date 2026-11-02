@@ -33,6 +33,8 @@ def make_filter(**parameters: Any) -> NotificationFilter:
         "group__id": None,
         "recipient__id": None,
         "status": None,
+        "category": None,
+        "priority": None,
         "public": None,
         "timestamp_after": None,
         "timestamp_before": None,
@@ -124,6 +126,78 @@ async def test_filtering_by_status(
     rows = await run(dal, make_filter(status="CRITICAL"))
 
     assert [row.verb for row in rows] == ["urgent"]
+
+
+async def test_filtering_by_builtin_and_custom_category(
+    dal: NotificationDataAccessLayer, user: User, session: AsyncSession
+) -> None:
+    """Category filters accept built-in and namespaced application keys."""
+    await dal.create_notification(
+        verb="order", actor=user, recipients=user, category="orders", is_sent=True
+    )
+    await dal.create_notification(
+        verb="billing",
+        actor=user,
+        recipients=user,
+        category="Com.Example.Billing",
+        is_sent=True,
+    )
+    await session.commit()
+
+    assert [row.verb for row in await run(dal, make_filter(category="ORDERS"))] == [
+        "order"
+    ]
+    assert [
+        row.verb
+        for row in await run(dal, make_filter(category="com.example.billing"))
+    ] == ["billing"]
+
+
+async def test_filtering_by_priority(
+    dal: NotificationDataAccessLayer, user: User, session: AsyncSession
+) -> None:
+    """Priority filters match the normalized priority key."""
+    await dal.create_notification(
+        verb="urgent", actor=user, recipients=user, priority="urgent", is_sent=True
+    )
+    await dal.create_notification(
+        verb="routine", actor=user, recipients=user, priority="normal", is_sent=True
+    )
+    await session.commit()
+
+    rows = await run(dal, make_filter(priority="urgent"))
+    assert [row.verb for row in rows] == ["urgent"]
+
+
+async def test_priority_ordering_uses_urgency_rank(
+    dal: NotificationDataAccessLayer, user: User, session: AsyncSession
+) -> None:
+    """Descending priority puts urgent first and uses timestamp as a tie-breaker."""
+    for priority in ("low", "urgent", "normal", "high"):
+        await dal.create_notification(
+            verb=priority,
+            actor=user,
+            recipients=user,
+            priority=priority,
+            is_sent=True,
+        )
+    await session.commit()
+
+    rows = await run(dal, make_filter(ordering="-priority"))
+    assert [row.priority for row in rows] == ["urgent", "high", "normal", "low"]
+
+    ascending = await run(dal, make_filter(ordering="priority"))
+    assert [row.priority for row in ascending] == ["low", "normal", "high", "urgent"]
+
+
+def test_filter_rejects_invalid_category_or_priority() -> None:
+    """Invalid taxonomy filters are rejected before SQL is constructed."""
+    import pytest
+
+    with pytest.raises(ValueError, match="category"):
+        make_filter(category="bad category")
+    with pytest.raises(ValueError, match="priority"):
+        make_filter(priority="immediate")
 
 
 async def test_filtering_by_visibility(

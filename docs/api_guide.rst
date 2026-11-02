@@ -102,13 +102,22 @@ their groups. Notifications cleared by that user are excluded. The response is:
    {
      "total": 12,
      "unread": 8,
-     "read": 4
+     "read": 4,
+     "by_category": {
+       "orders": {"total": 8, "unread": 6, "read": 2},
+       "security": {"total": 4, "unread": 2, "read": 2}
+     },
+     "by_priority": {
+       "normal": {"total": 8, "unread": 5, "read": 3},
+       "urgent": {"total": 4, "unread": 3, "read": 1}
+     }
    }
 
 The preview endpoint returns up to 20 recent notifications (5 by default),
-including both read and unread items. Each item includes an ``is_seen`` flag
-and nullable ``expires_at`` timestamp. Expired notifications are excluded from
-inbox, activity, summary and preview responses, including group-addressed items.
+including both read and unread items. Each item includes an ``is_seen`` flag,
+``status``, ``category``, ``priority`` and nullable ``expires_at`` timestamp.
+Expired notifications are excluded from inbox, activity, summary and preview
+responses, including group-addressed items.
 It selects only the fields needed for the preview, does not hydrate generic
 relations, and uses the same audience restrictions and filter conditions as
 the inbox. Preview order is always newest first, regardless of an ``ordering``
@@ -125,6 +134,8 @@ and 20. A preview response looks like this:
          "title": "alice commented on your post 2 minutes ago",
          "description": "alice commented on your post",
          "status": "INFO",
+         "category": "orders",
+         "priority": "high",
          "link": "https://example.com/posts/42",
          "timestamp": "2026-11-01T12:00:00Z",
          "expires_at": null,
@@ -362,6 +373,9 @@ Parameter             Effect
 ``group__id``         Only notifications addressed to this group.
 ``recipient__id``     Only notifications addressed to this recipient.
 ``status``            Only notifications with this status.
+``category``          Only notifications with this built-in or custom category key.
+``priority``          Only notifications with this priority (``low``, ``normal``,
+                      ``high`` or ``urgent``).
 ``public``            Only public, or only private, notifications.
 ``timestamp_after``   Only notifications at or after this time.
 ``timestamp_before``  Only notifications at or before this time.
@@ -372,12 +386,14 @@ Parameter             Effect
 .. code-block:: bash
 
    $ curl -H "Authorization: Bearer <token>" \
-       "http://localhost:8000/notifications/?status=CRITICAL&ordering=-timestamp&limit=20"
+       "http://localhost:8000/notifications/?category=orders&priority=urgent&ordering=-priority&limit=20"
 
 Prefix the ordering field with ``-`` to sort descending. Only fields listed in
 ``API_ORDERING_FIELDS`` are honoured — anything else is ignored rather than
 raising — so a client cannot sort by an arbitrary column. Listings are ordered
-newest first when no ordering is given.
+newest first when no ordering is given. Priority ordering uses the explicit
+``low < normal < high < urgent`` rank; ``ordering=-priority`` puts urgent items
+first and uses newest-first ordering as the tie-breaker.
 
 The ``search`` term is matched case-insensitively against every field named in
 ``API_SEARCH_FIELDS``, which defaults to ``verb`` and ``description``.

@@ -20,6 +20,8 @@ class NotificationSerializer(BaseSerializer):
         group (List[Dict[str, Any]]): Groups associated with the notification.
         verb (Optional[str]): Action performed (e.g. "created", "updated").
         status (Optional[str]): Current status of the notification.
+        category (Optional[str]): Category key for the notification.
+        priority (Optional[str]): Urgency level of the notification.
         actor_content_type (Optional[str]): Type of actor associated with it.
         target_content_type (Optional[str]): Type of target associated with it.
         action_object_content_type (Optional[str]): Type of action object.
@@ -39,6 +41,8 @@ class NotificationSerializer(BaseSerializer):
     group: List[Dict[str, Any]] = []
     verb: Optional[str] = None
     status: Optional[str] = None
+    category: Optional[str] = None
+    priority: Optional[str] = None
     actor_content_type: Optional[str] = None
     target_content_type: Optional[str] = None
     action_object_content_type: Optional[str] = None
@@ -75,6 +79,8 @@ class NotificationSerializer(BaseSerializer):
             ),
             "verb": instance.verb,
             "status": instance.status,
+            "category": instance.category,
+            "priority": instance.priority,
             "actor_content_type": _content_type_label(instance.actor_content_type),
             "target_content_type": _content_type_label(instance.target_content_type),
             "action_object_content_type": _content_type_label(

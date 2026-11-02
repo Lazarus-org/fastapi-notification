@@ -21,6 +21,10 @@ from fastapi_notification.identity import (
     hydrate_notification_identities,
     require_staff_identity,
 )
+from fastapi_notification.models.helper.enums import (
+    normalize_category,
+    normalize_priority,
+)
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.repository.queryset import notification as queryset
 from fastapi_notification.repository.queryset.deduplication import (
@@ -34,7 +38,7 @@ class NotificationDataAccessLayer:
 
     Bound to a single :class:`AsyncSession`, this class provides methods for
     creating, updating, deleting and filtering notifications by recipient,
-    group, status and visibility.
+    group, status, category, priority and visibility.
 
     Every read method has a ``*_statement`` counterpart that returns the
     underlying statement instead of executing it, which is what the API routes
@@ -439,8 +443,8 @@ class NotificationDataAccessLayer:
             await hydrate_notification_identities(self.session, [notification])
         return notification
 
-    async def summary(self, statement: Select, user: Any) -> dict[str, int]:
-        """Return total, unread and read counts for a scoped notification query.
+    async def summary(self, statement: Select, user: Any) -> Dict[str, Any]:
+        """Return total/read counts and category/priority breakdowns.
 
         The statement is expected to be restricted to the authenticated user's
         sent audience and to exclude notifications that user has cleared. The
@@ -452,17 +456,40 @@ class NotificationDataAccessLayer:
             user (Any): The identity whose read state is summarized.
 
         Returns:
-            dict[str, int]: Counts whose total equals read plus unread.
+            Dict[str, Any]: Total/read counts plus grouped category and priority
+                breakdowns. Each breakdown contains total, unread and read.
 
         """
         aggregate = self.query_set.summary_statement(statement, user)
         result = await self.session.execute(aggregate)
-        row = result.mappings().one()
-        return {
-            "total": int(row["total"] or 0),
-            "unread": int(row["unread"] or 0),
-            "read": int(row["read"] or 0),
+        summary: Dict[str, Any] = {
+            "total": 0,
+            "unread": 0,
+            "read": 0,
+            "by_category": {},
+            "by_priority": {},
         }
+        for row in result.mappings().all():
+            category = row["category"]
+            priority = row["priority"]
+            is_seen = bool(row["is_seen"])
+            count = int(row["count"] or 0)
+            state_key = "read" if is_seen else "unread"
+
+            summary["total"] += count
+            summary[state_key] += count
+
+            for dimension, value in (
+                ("by_category", category),
+                ("by_priority", priority),
+            ):
+                breakdown = summary[dimension].setdefault(
+                    value, {"total": 0, "unread": 0, "read": 0}
+                )
+                breakdown["total"] += count
+                breakdown[state_key] += count
+
+        return summary
 
     async def preview(
         self, statement: Select, user: Any, limit: int = 5
@@ -521,6 +548,8 @@ class NotificationDataAccessLayer:
         deduplication_key: Optional[str] = None,
         deduplication_scope: str = "global",
         deduplication_key_expires_at: Optional[datetime] = None,
+        category: str = "general",
+        priority: str = "normal",
     ) -> Notification:
         """Create a notification, optionally deduplicating a business event.
 
@@ -549,6 +578,8 @@ class NotificationDataAccessLayer:
                 ``"global"``. Use a tenant, user or event namespace when needed.
             deduplication_key_expires_at (Optional[datetime]): When the key may
                 be reused. ``None`` retains it until its notification is deleted.
+            category (str): Built-in or application-defined category key.
+            priority (str): One of ``low``, ``normal``, ``high`` or ``urgent``.
 
         Returns:
             Notification: The newly created notification, or the original
@@ -557,8 +588,11 @@ class NotificationDataAccessLayer:
         Raises:
             TypeError: If a key, scope or key expiry has an unsupported type.
             ValueError: If a key/scope is empty or too long, or the expiry is
-                naive or not in the future.
+                naive or not in the future, or if category/priority is invalid.
         """
+        category = normalize_category(category)
+        priority = normalize_priority(priority)
+
         if deduplication_key is not None:
             if not isinstance(deduplication_key, str):
                 raise TypeError("deduplication_key must be a string or None.")
@@ -618,6 +652,8 @@ class NotificationDataAccessLayer:
                 is_sent=is_sent,
                 data=data,
                 expires_at=expires_at,
+                category=category,
+                priority=priority,
             )
             if recipients:
                 await queryset.add_recipients(self.session, notification, recipients)
@@ -641,6 +677,8 @@ class NotificationDataAccessLayer:
                 is_sent=is_sent,
                 data=data,
                 expires_at=expires_at,
+                category=category,
+                priority=priority,
             )
             selected, claimed = await claim_deduplication_key(
                 self.session,
@@ -672,6 +710,8 @@ class NotificationDataAccessLayer:
         data: Optional[Data] = None,
         expires_at: Optional[datetime] = None,
         clear_expires_at: bool = False,
+        category: Optional[str] = None,
+        priority: Optional[str] = None,
     ) -> Notification:
         """Update specified fields of an existing notification.
 
@@ -682,11 +722,18 @@ class NotificationDataAccessLayer:
             data (Optional[Data]): Any additional data to update.
             expires_at (Optional[datetime]): New expiration instant.
             clear_expires_at (bool): Explicitly remove the current expiration.
+            category (Optional[str]): New category key; ``None`` leaves it unchanged.
+            priority (Optional[str]): New priority; ``None`` leaves it unchanged.
 
         Returns:
             Notification: The updated notification instance.
 
         """
+        if category is not None:
+            category = normalize_category(category)
+        if priority is not None:
+            priority = normalize_priority(priority)
+
         return await queryset.update_notification(
             self.session,
             notification_id,
@@ -695,6 +742,8 @@ class NotificationDataAccessLayer:
             data,
             expires_at,
             clear_expires_at,
+            category,
+            priority,
         )
 
     async def delete_notification(

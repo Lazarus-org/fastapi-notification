@@ -135,12 +135,14 @@ def create_notification_router(
             session: AsyncSession = Depends(session_dep),
             user: Any = Depends(user_dep),
             filterset: NotificationFilter = Depends(routes.get_filter_dependency()),
-        ) -> Dict[str, int]:
-            """Return total, unread and read counts for the current user.
+        ) -> Dict[str, Any]:
+            """Return counts and category/priority breakdowns for the current user.
 
             Counts include sent notifications addressed directly to the user or
             to one of their groups, exclude notifications cleared by that user,
-            and honour the same filters as the notification listing.
+            and honour the same filters as the notification listing. The
+            ``by_category`` and ``by_priority`` mappings each include total,
+            unread and read counts for their respective keys.
 
             """
             dal = routes.get_dal(session)
@@ -194,8 +196,11 @@ def create_notification_router(
                     ),
                     description=row["description"],
                     status=row["status"],
+                    category=row["category"],
+                    priority=row["priority"],
                     link=row["link"],
                     timestamp=row["timestamp"],
+                    expires_at=row["expires_at"],
                     is_seen=bool(row["is_seen"]),
                 )
                 for row in rows

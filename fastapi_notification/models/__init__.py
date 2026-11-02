@@ -8,7 +8,7 @@ from .content_type import (
 )
 from .deleted_notification import DeletedNotification
 from .deduplication import NotificationDeduplication
-from .helper.enums.status_choices import NotificationStatus
+from .helper.enums import NotificationCategory, NotificationPriority, NotificationStatus
 from .notification import Notification, notification_group
 from .notification_recipient import NotificationRecipient
 from .notification_seen import NotificationSeen
@@ -20,9 +20,11 @@ __all__ = [
     "ContentType",
     "DeletedNotification",
     "NotificationDeduplication",
+    "NotificationCategory",
     "Group",
     "Notification",
     "NotificationPermission",
+    "NotificationPriority",
     "NotificationRecipient",
     "NotificationSeen",
     "NotificationStatus",

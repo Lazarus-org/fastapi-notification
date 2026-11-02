@@ -79,6 +79,8 @@ async def test_notification_serializer_expands_related_objects(
 
     assert data["id"] == notification.id
     assert data["verb"] == "liked your post"
+    assert data["category"] == "general"
+    assert data["priority"] == "normal"
     assert data["recipient"] == [{"id": user.id}]
     assert data["actor_content_type"] == "auth.user"
     assert data["target_content_type"] is None
@@ -106,6 +108,8 @@ def test_dynamic_serializer_defaults_to_a_title_and_summary() -> None:
         "id": 1,
         "description": "ann waved",
         "status": "INFO",
+        "category": "orders",
+        "priority": "urgent",
         "link": None,
         "timestamp": timestamp,
     }
@@ -115,6 +119,8 @@ def test_dynamic_serializer_defaults_to_a_title_and_summary() -> None:
     assert data["title"] == "ann waved 1 hour ago"
     assert data["id"] == 1
     assert data["status"] == "INFO"
+    assert data["category"] == "orders"
+    assert data["priority"] == "urgent"
 
 
 def test_dynamic_serializer_honours_a_configured_field_list() -> None:

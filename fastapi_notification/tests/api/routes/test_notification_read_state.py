@@ -41,6 +41,8 @@ async def test_post_marks_notification_as_unseen_and_updates_inbox_views(
         "total": 1,
         "unread": 1,
         "read": 0,
+        "by_category": {"general": {"total": 1, "unread": 1, "read": 0}},
+        "by_priority": {"normal": {"total": 1, "unread": 1, "read": 0}},
     }
     preview = (await client.get("/notifications/preview/")).json()
     assert preview["results"][0]["is_seen"] is False

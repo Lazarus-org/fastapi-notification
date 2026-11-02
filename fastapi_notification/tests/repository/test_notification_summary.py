@@ -54,6 +54,8 @@ async def test_summary_and_preview_execute_with_sqlite() -> None:
                     actor_content_type_id=content_type.id,
                     actor_object_id="1",
                     is_sent=True,
+                    category="orders",
+                    priority="urgent",
                     timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
                 ),
                 Notification(
@@ -62,6 +64,8 @@ async def test_summary_and_preview_execute_with_sqlite() -> None:
                     actor_content_type_id=content_type.id,
                     actor_object_id="1",
                     is_sent=True,
+                    category="social",
+                    priority="low",
                     timestamp=datetime(2024, 1, 2, tzinfo=timezone.utc),
                 ),
                 Notification(
@@ -127,15 +131,31 @@ async def test_summary_and_preview_execute_with_sqlite() -> None:
             summary = await dal.summary(statement, user)
             preview = await dal.preview(statement, user, limit=1)
 
-            assert summary == {"total": 2, "unread": 1, "read": 1}
+            assert summary == {
+                "total": 2,
+                "unread": 1,
+                "read": 1,
+                "by_category": {
+                    "orders": {"total": 1, "unread": 0, "read": 1},
+                    "social": {"total": 1, "unread": 1, "read": 0},
+                },
+                "by_priority": {
+                    "urgent": {"total": 1, "unread": 0, "read": 1},
+                    "low": {"total": 1, "unread": 1, "read": 0},
+                },
+            }
             assert len(preview) == 1
             assert preview[0]["id"] == notifications[1].id
             assert preview[0]["is_seen"] is False
+            assert preview[0]["category"] == "social"
+            assert preview[0]["priority"] == "low"
             assert set(preview[0]) == {
                 "id",
                 "verb",
                 "description",
                 "status",
+                "category",
+                "priority",
                 "link",
                 "timestamp",
                 "expires_at",
@@ -152,6 +172,8 @@ async def test_summary_and_preview_execute_with_sqlite() -> None:
                 "total": 0,
                 "unread": 0,
                 "read": 0,
+                "by_category": {},
+                "by_priority": {},
             }
             assert await dal.preview(empty_statement, other_user, limit=5) == []
     finally:

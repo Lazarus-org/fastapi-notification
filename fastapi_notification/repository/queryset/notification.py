@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 from sqlalchemy import (
     ColumnElement,
     Select,
-    case,
     delete,
     func,
     insert,
@@ -430,7 +429,7 @@ class NotificationQuerySet:
         )
 
     def summary_statement(self, statement: Select, user: Any) -> Select:
-        """Build one aggregate query for a user's visible notification counts.
+        """Build one grouped aggregate query for a user's visible notifications.
 
         The supplied statement must already be scoped to sent notifications
         addressed to the user and their groups, with that user's cleared items
@@ -441,12 +440,16 @@ class NotificationQuerySet:
             user (Any): The identity whose read state is being summarized.
 
         Returns:
-            Select: A single-row aggregate with ``total``, ``unread`` and
-            ``read`` counts.
+            Select: Grouped counts by category, priority and read state. The DAL
+            folds these rows into total/unread/read and dimension breakdowns.
 
         """
         visible_ids = (
-            statement.with_only_columns(Notification.id)
+            statement.with_only_columns(
+                Notification.id,
+                Notification.category,
+                Notification.priority,
+            )
             .order_by(None)
             .subquery()
         )
@@ -455,15 +458,16 @@ class NotificationQuerySet:
         )
         is_seen = visible_ids.c.id.in_(seen_ids)
 
-        return select(
-            func.count(visible_ids.c.id).label("total"),
-            func.coalesce(
-                func.sum(case((is_seen, 1), else_=0)), 0
-            ).label("read"),
-            func.coalesce(
-                func.sum(case((~is_seen, 1), else_=0)), 0
-            ).label("unread"),
-        ).select_from(visible_ids)
+        return (
+            select(
+                visible_ids.c.category,
+                visible_ids.c.priority,
+                is_seen.label("is_seen"),
+                func.count(visible_ids.c.id).label("count"),
+            )
+            .select_from(visible_ids)
+            .group_by(visible_ids.c.category, visible_ids.c.priority, is_seen)
+        )
 
     def preview_statement(
         self, statement: Select, user: Any, limit: int
@@ -488,6 +492,8 @@ class NotificationQuerySet:
                 Notification.verb,
                 Notification.description,
                 Notification.status,
+                Notification.category,
+                Notification.priority,
                 Notification.link,
                 Notification.timestamp,
                 Notification.expires_at,
@@ -572,6 +578,8 @@ async def create_notification(
     is_sent: bool = False,
     data: Data = None,
     expires_at: Optional[datetime] = None,
+    category: str = "general",
+    priority: str = "normal",
 ) -> Notification:
     """Create a notification, resolving its generic relations.
 
@@ -591,6 +599,8 @@ async def create_notification(
         is_sent (bool): The send status of the notification. Defaults to False.
         data (Data): Arbitrary JSON data for the notification.
         expires_at (Optional[datetime]): Optional timezone-aware expiration instant.
+        category (str): Built-in or application-defined category key.
+        priority (str): One of ``low``, ``normal``, ``high`` or ``urgent``.
 
     Returns:
         Notification: The created notification.
@@ -625,6 +635,8 @@ async def create_notification(
         is_sent=is_sent,
         data=data,
         expires_at=expires_at,
+        category=category,
+        priority=priority,
         actor_content_type_id=actor_content_type.id,
         actor_object_id=normalize_object_id(actor.id),
         target_content_type_id=(
@@ -664,6 +676,8 @@ async def update_notification(
     data: Data = None,
     expires_at: Optional[datetime] = None,
     clear_expires_at: bool = False,
+    category: Optional[str] = None,
+    priority: Optional[str] = None,
 ) -> Notification:
     """Update the given fields of a notification, leaving the rest untouched.
 
@@ -675,6 +689,8 @@ async def update_notification(
         data (Data): The notification data. Left alone when ``None``.
         expires_at (Optional[datetime]): New timezone-aware expiry instant.
         clear_expires_at (bool): Clear the expiry when True.
+        category (Optional[str]): New category key; left unchanged when ``None``.
+        priority (Optional[str]): New priority; left unchanged when ``None``.
 
     Returns:
         Notification: The updated notification.
@@ -702,6 +718,10 @@ async def update_notification(
         notification.public = public
     if data is not None:
         notification.data = data
+    if category is not None:
+        notification.category = category
+    if priority is not None:
+        notification.priority = priority
     if expires_at is not None:
         notification.expires_at = expires_at
     elif clear_expires_at:

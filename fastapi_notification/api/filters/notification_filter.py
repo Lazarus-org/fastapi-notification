@@ -2,9 +2,13 @@ from datetime import datetime
 from typing import Any, List, Optional
 
 from fastapi import Query, Request
-from sqlalchemy import ColumnElement, Select, or_
+from sqlalchemy import ColumnElement, Select, case, or_
 
 from fastapi_notification.identity import get_identity_adapter
+from fastapi_notification.models.helper.enums import (
+    normalize_category,
+    normalize_priority,
+)
 from fastapi_notification.models.notification import Notification, notification_group
 from fastapi_notification.models.notification_recipient import NotificationRecipient
 from fastapi_notification.settings.conf import config
@@ -30,6 +34,18 @@ class NotificationFilter:
         status: Optional[str] = Query(
             None, description="Filter notifications by status."
         ),
+        category: Optional[str] = Query(
+            None,
+            min_length=1,
+            max_length=64,
+            pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            description="Filter by a built-in or application-defined category key.",
+        ),
+        priority: Optional[str] = Query(
+            None,
+            pattern=r"^(low|normal|high|urgent)$",
+            description="Filter by priority: low, normal, high or urgent.",
+        ),
         public: Optional[bool] = Query(
             None, description="Filter notifications by public visibility."
         ),
@@ -53,6 +69,8 @@ class NotificationFilter:
         self.group__id = group__id
         self.recipient__id = recipient__id
         self.status = status
+        self.category = normalize_category(category) if category is not None else None
+        self.priority = normalize_priority(priority) if priority is not None else None
         self.public = public
         self.timestamp_after = timestamp_after
         self.timestamp_before = timestamp_before
@@ -94,6 +112,12 @@ class NotificationFilter:
 
         if self.status is not None:
             conditions.append(Notification.status == self.status)
+
+        if self.category is not None:
+            conditions.append(Notification.category == self.category)
+
+        if self.priority is not None:
+            conditions.append(Notification.priority == self.priority)
 
         if self.public is not None:
             conditions.append(Notification.public.is_(self.public))
@@ -153,6 +177,19 @@ class NotificationFilter:
 
         if field not in config.api_ordering_fields:
             return statement
+
+        if field == "priority":
+            priority_order = case(
+                (Notification.priority == "low", 1),
+                (Notification.priority == "normal", 2),
+                (Notification.priority == "high", 3),
+                (Notification.priority == "urgent", 4),
+                else_=0,
+            )
+            return statement.order_by(None).order_by(
+                priority_order.desc() if descending else priority_order.asc(),
+                Notification.timestamp.desc(),
+            )
 
         column: Any = getattr(Notification, field, None)
         if column is None:
