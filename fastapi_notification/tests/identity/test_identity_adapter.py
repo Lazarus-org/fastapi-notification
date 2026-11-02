@@ -127,6 +127,7 @@ def test_core_metadata_creates_without_authentication_tables() -> None:
     assert "notification_recipient" in table_names
     assert "notification_seen" in table_names
     assert "deleted_notifications" in table_names
+    assert "notification_deduplication" in table_names
     assert "users" not in table_names
     assert "groups" not in table_names
 

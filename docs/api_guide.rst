@@ -450,3 +450,14 @@ Beyond these route-level checks, the data itself is scoped to the caller: a
 listing only ever contains notifications addressed to that user or to a group
 they belong to, so one user cannot read another's notifications by guessing an
 identifier. See :doc:`roles` for how this differs by role.
+
+Notification creation idempotency
+---------------------------------
+
+Applications create notifications through ``NotificationDataAccessLayer``.
+For retryable event sources, use a stable ``deduplication_key`` and a scope
+that represents the key's uniqueness boundary. Reusing an active scoped key
+returns the original notification without changing its recipients or content.
+See :ref:`idempotent-notification-creation` in the usage guide for the full
+contract and expiration behavior.
+

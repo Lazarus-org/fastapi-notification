@@ -33,15 +33,16 @@ from fastapi_notification.identity import (
     get_identity_adapter,
     require_staff_identity,
 )
+from fastapi_notification.models.base import utcnow
 from fastapi_notification.models.content_type import (
     ContentType,
     normalize_object_id,
 )
 from fastapi_notification.models.deleted_notification import DeletedNotification
+from fastapi_notification.models.deduplication import NotificationDeduplication
 from fastapi_notification.models.notification import Notification, notification_group
 from fastapi_notification.models.notification_recipient import NotificationRecipient
 from fastapi_notification.models.notification_seen import NotificationSeen
-from fastapi_notification.models.base import utcnow
 from fastapi_notification.models.state import insert_many_from_select_if_absent
 
 
@@ -764,6 +765,11 @@ async def delete_notification(
         await DeletedNotification.create(session, instance, recipient)
         return
 
+    await session.execute(
+        delete(NotificationDeduplication).where(
+            NotificationDeduplication.notification_id == notification_id
+        )
+    )
     await session.delete(instance)
     await session.flush()
 
@@ -893,6 +899,11 @@ async def delete_many(
         return 0
 
     await session.execute(
+        delete(NotificationDeduplication).where(
+            NotificationDeduplication.notification_id.in_(identifiers)
+        )
+    )
+    await session.execute(
         delete(Notification).where(Notification.id.in_(identifiers))
     )
     await session.flush()
@@ -944,6 +955,11 @@ async def purge_expired(
     if not notification_ids:
         return 0
 
+    await session.execute(
+        delete(NotificationDeduplication).where(
+            NotificationDeduplication.notification_id.in_(notification_ids)
+        )
+    )
     await session.execute(
         delete(NotificationSeen).where(
             NotificationSeen.notification_id.in_(notification_ids)

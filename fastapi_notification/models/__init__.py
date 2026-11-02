@@ -7,6 +7,7 @@ from .content_type import (
     register_content_model,
 )
 from .deleted_notification import DeletedNotification
+from .deduplication import NotificationDeduplication
 from .helper.enums.status_choices import NotificationStatus
 from .notification import Notification, notification_group
 from .notification_recipient import NotificationRecipient
@@ -18,6 +19,7 @@ __all__ = [
     "Base",
     "ContentType",
     "DeletedNotification",
+    "NotificationDeduplication",
     "Group",
     "Notification",
     "NotificationPermission",

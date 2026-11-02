@@ -91,6 +91,7 @@ Only ``verb`` and ``actor`` are required. The parameters are:
     A short phrase describing the action, for example ``"liked"`` or
     ``"commented on"``.
 
+
 ``actor`` (any registered model instance, required)
     The user or object performing the action.
 
@@ -131,6 +132,67 @@ Only ``verb`` and ``actor`` are required. The parameters are:
     Optional timezone-aware expiration instant. Naive datetimes are rejected;
     aware values are normalized to UTC. Expired notifications are hidden from
     normal recipient queries but retained in the database.
+
+``deduplication_key`` (``Optional[str]``, default ``None``)
+    Stable event identifier used to prevent duplicate notification creation.
+    When omitted, each call creates a new notification.
+
+``deduplication_scope`` (``str``, default ``"global"``)
+    Namespace in which the key must be unique. Use tenant/account scope when
+    the event identifier is not globally unique.
+
+``deduplication_key_expires_at`` (``Optional[datetime]``, default ``None``)
+    Time after which the key may be reused. Must be timezone-aware and in the
+    future. ``None`` retains the key until the notification is permanently
+    deleted.
+
+.. _idempotent-notification-creation:
+
+Idempotent Creation and Deduplication
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When a notification is created from a retryable background job, payment
+callback, webhook or event consumer, pass a stable ``deduplication_key`` to
+prevent the same business event from creating multiple notifications.
+
+.. code-block:: python
+
+   notification = await dal.create_notification(
+       verb="payment received",
+       actor=payment,
+       recipients=[customer],
+       is_sent=True,
+       deduplication_scope=f"tenant:{tenant.id}",
+       deduplication_key=f"payment-received:{payment.id}",
+       deduplication_key_expires_at=(
+           datetime.now(timezone.utc) + timedelta(days=7)
+       ),
+   )
+   await session.commit()
+
+The key is unique within its scope. The default scope is ``"global"``; use a
+scope that reflects the uniqueness boundary of your business event, such as a
+tenant or account identifier. Keys and scopes must be non-empty strings of at
+most 255 characters.
+
+When an active key is reused, ``create_notification()`` returns the original
+notification unchanged. It does not update the original content, merge
+recipients/groups, or create a second notification. This makes retries
+idempotent and avoids accidentally broadening the audience on a duplicate
+request. The caller still owns the transaction and must commit or roll it back.
+A retry does not extend or otherwise change the original key's expiry policy.
+
+``deduplication_key_expires_at`` is independent of the notification's own
+``expires_at``. A ``None`` key expiry retains the key until the notification is
+permanently deleted. Once the key expiry is reached, the next creation using
+the same scope and key may atomically claim it for a new notification. The old
+notification remains unchanged. Permanently deleting or explicitly purging a
+notification releases its key; merely expiring it from recipient inboxes does
+not.
+
+If ``deduplication_key`` is omitted, every call creates a new notification as
+usual.
+
 
 Expiration and Retention
 ~~~~~~~~~~~~~~~~~~~~~~~~

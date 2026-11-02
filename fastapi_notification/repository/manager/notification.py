@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import Select
@@ -23,6 +23,9 @@ from fastapi_notification.identity import (
 )
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.repository.queryset import notification as queryset
+from fastapi_notification.repository.queryset.deduplication import (
+    claim_deduplication_key,
+)
 
 
 # pylint: disable=too-many-arguments,too-many-public-methods
@@ -38,7 +41,7 @@ class NotificationDataAccessLayer:
     use so they can apply filtering, ordering and pagination first.
 
     Methods:
-        create_notification: Creates a new notification with specific details.
+        create_notification: Creates or reuses a notification for a scoped event key.
         update_notification: Updates selective fields of an existing notification.
         delete_notification: Deletes or soft-deletes a notification.
         all_notifications: Retrieves every notification with optional filters.
@@ -515,50 +518,151 @@ class NotificationDataAccessLayer:
         is_sent: bool = False,
         data: Optional[Data] = None,
         expires_at: Optional[datetime] = None,
+        deduplication_key: Optional[str] = None,
+        deduplication_scope: str = "global",
+        deduplication_key_expires_at: Optional[datetime] = None,
     ) -> Notification:
-        """Create a new notification with the provided details.
+        """Create a notification, optionally deduplicating a business event.
+
+        An active ``(deduplication_scope, deduplication_key)`` pair is
+        idempotent: a retry returns the original notification unchanged. It
+        does not merge new recipients or overwrite the original content. When
+        the key expiry is reached, a new notification may claim the key; the
+        previous notification remains unchanged.
 
         Args:
-            verb (str): A short phrase describing the action (e.g. "commented on").
+            verb (str): A short phrase describing the action.
             actor (Actor): The user or entity performing the action.
-            description (Optional[Description]): Additional context. Generated
-                from the actor, verb and target when omitted.
+            description (Optional[Description]): Additional context.
             recipients (Optional[Recipients]): Users who will receive it.
             groups (Optional[Groups]): Groups to target.
-            status (str): The status of the notification. Defaults to "INFO".
-            public (bool): Whether it is publicly visible. Defaults to True.
+            status (str): The notification status. Defaults to ``"INFO"``.
+            public (bool): Whether it is publicly visible.
             target (Optional[Target]): The object being acted upon.
             action_object (Optional[ActionObject]): The object used to act.
-            link (Optional[Link]): A URL associated with the notification.
-            is_sent (bool): Whether it is marked as sent. Defaults to False.
-            data (Optional[Data]): Any additional JSON data.
+            link (Optional[Link]): A URL associated with the action.
+            is_sent (bool): Whether the notification is marked as sent.
+            data (Optional[Data]): Additional JSON data.
+            expires_at (Optional[datetime]): Notification visibility expiration.
+            deduplication_key (Optional[str]): Optional event identifier.
+            deduplication_scope (str): Namespace for the key; defaults to
+                ``"global"``. Use a tenant, user or event namespace when needed.
+            deduplication_key_expires_at (Optional[datetime]): When the key may
+                be reused. ``None`` retains it until its notification is deleted.
 
         Returns:
-            Notification: The created notification instance.
+            Notification: The newly created notification, or the original
+                notification when an active scoped key already exists.
 
+        Raises:
+            TypeError: If a key, scope or key expiry has an unsupported type.
+            ValueError: If a key/scope is empty or too long, or the expiry is
+                naive or not in the future.
         """
-        notification = await queryset.create_notification(
-            self.session,
-            verb=verb,
-            actor=actor,
-            description=description,
-            status=status,
-            public=public,
-            target=target,
-            action_object=action_object,
-            link=link,
-            is_sent=is_sent,
-            data=data,
-            expires_at=expires_at,
-        )
+        if deduplication_key is not None:
+            if not isinstance(deduplication_key, str):
+                raise TypeError("deduplication_key must be a string or None.")
+            if (
+                not deduplication_key.strip()
+                or len(deduplication_key) > 255
+                or "\x00" in deduplication_key
+            ):
+                raise ValueError(
+                    "deduplication_key must contain 1 to 255 non-NUL characters."
+                )
+            if not isinstance(deduplication_scope, str):
+                raise TypeError("deduplication_scope must be a string.")
+            if (
+                not deduplication_scope.strip()
+                or len(deduplication_scope) > 255
+                or "\x00" in deduplication_scope
+            ):
+                raise ValueError(
+                    "deduplication_scope must contain 1 to 255 non-NUL characters."
+                )
+            if deduplication_key_expires_at is not None:
+                if not isinstance(deduplication_key_expires_at, datetime):
+                    raise TypeError(
+                        "deduplication_key_expires_at must be a datetime or None."
+                    )
+                if (
+                    deduplication_key_expires_at.tzinfo is None
+                    or deduplication_key_expires_at.utcoffset() is None
+                ):
+                    raise ValueError(
+                        "deduplication_key_expires_at must be timezone-aware."
+                    )
+                deduplication_key_expires_at = (
+                    deduplication_key_expires_at.astimezone(timezone.utc)
+                )
+                if deduplication_key_expires_at <= datetime.now(timezone.utc):
+                    raise ValueError(
+                        "deduplication_key_expires_at must be in the future."
+                    )
+        elif deduplication_key_expires_at is not None:
+            raise ValueError(
+                "deduplication_key_expires_at requires deduplication_key."
+            )
 
-        if recipients:
-            await queryset.add_recipients(self.session, notification, recipients)
+        if deduplication_key is None:
+            notification = await queryset.create_notification(
+                self.session,
+                verb=verb,
+                actor=actor,
+                description=description,
+                status=status,
+                public=public,
+                target=target,
+                action_object=action_object,
+                link=link,
+                is_sent=is_sent,
+                data=data,
+                expires_at=expires_at,
+            )
+            if recipients:
+                await queryset.add_recipients(self.session, notification, recipients)
+            if groups:
+                await queryset.add_groups(self.session, notification, groups)
+            return notification
 
-        if groups:
-            await queryset.add_groups(self.session, notification, groups)
+        # Keep the candidate notification, key claim and audience associations
+        # atomic while leaving the outer transaction under caller control.
+        async with self.session.begin_nested():
+            notification = await queryset.create_notification(
+                self.session,
+                verb=verb,
+                actor=actor,
+                description=description,
+                status=status,
+                public=public,
+                target=target,
+                action_object=action_object,
+                link=link,
+                is_sent=is_sent,
+                data=data,
+                expires_at=expires_at,
+            )
+            selected, claimed = await claim_deduplication_key(
+                self.session,
+                notification,
+                scope=deduplication_scope,
+                key=deduplication_key,
+                expires_at=deduplication_key_expires_at,
+            )
+            if not claimed:
+                # An active key is immutable: retries return the original
+                # notification and never merge recipients or overwrite content.
+                await self.session.delete(notification)
+                await self.session.flush()
+                await selected.resolve_generic_relations(self.session)
+                await hydrate_notification_identities(self.session, [selected])
+                return selected
 
-        return notification
+            if recipients:
+                await queryset.add_recipients(self.session, notification, recipients)
+            if groups:
+                await queryset.add_groups(self.session, notification, groups)
+            return notification
 
     async def update_notification(
         self,

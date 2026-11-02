@@ -18,6 +18,9 @@ It is built on async SQLAlchemy 2.0 and Pydantic v2, and it is the FastAPI count
 
 - **Notification inbox and activity history** — unseen notifications, seen activity, aggregate read/unread counts, and a bounded recent preview.
 - **Notification expiration** — optional timezone-aware expiry with explicit, retention-controlled cleanup.
+- **Idempotent notification creation** — optional scoped deduplication keys
+  prevent duplicate notifications from retried jobs, callbacks and event
+  consumers; expired keys can be safely reused.
 - **Anything can be an actor** — notifications reference an actor, a target and an action object generically, so any of your own models can take those roles. Generic relations support integer, UUID and string primary keys.
 - **Addressed to users or groups** — a notification reaches named recipients, every member of a group, or both.
 - **Soft and hard deletion** — clearing a notification hides it for one user while leaving it intact for the others; permanent deletion is available to administrators and off by default.

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fastapi_notification.models.base import Base
+from fastapi_notification.models.state import insert_if_absent
 
 # Registry of models that may participate in a generic relation, keyed by the
 # ``(app_label, model)`` pair that identifies them in the ``content_type`` table.
@@ -195,12 +196,18 @@ class ContentType(Base):
             select(cls).where(cls.app_label == app_label, cls.model == model_name)
         )
         content_type = result.scalar_one_or_none()
+        if content_type is not None:
+            return content_type
 
-        if content_type is None:
-            content_type = cls(app_label=app_label, model=model_name)
-            session.add(content_type)
-            await session.flush()
-
+        # The initial read avoids a write for the common already-registered
+        # case. The unique natural key plus conflict-safe insert resolves races
+        # when two workers register the same model for the first time.
+        content_type, _ = await insert_if_absent(
+            session,
+            cls,
+            {"app_label": app_label, "model": model_name},
+            ("app_label", "model"),
+        )
         return content_type
 
     def model_class(self) -> Optional[Type[Any]]:
