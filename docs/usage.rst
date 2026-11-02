@@ -691,3 +691,31 @@ trimmed, lowercased and validated. ``NotificationPriority`` provides the four
 supported urgency levels. Both enums are importable from
 ``fastapi_notification``. See :doc:`taxonomy` for filtering, ordering and summary
 breakdowns.
+
+Group audience strategies
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Dynamic group membership remains the default::
+
+    await dal.create_notification(
+        verb="deployment completed",
+        actor=deployment,
+        groups=[engineering_group],
+        group_audience_strategy="dynamic",
+        is_sent=True,
+    )
+
+To freeze the audience at creation time, configure the identity adapter's
+``get_group_user_ids(session, group)`` method and use::
+
+    await dal.create_notification(
+        verb="deployment completed",
+        actor=deployment,
+        groups=[engineering_group],
+        group_audience_strategy="snapshot",
+        is_sent=True,
+    )
+
+Snapshot members are stored as individual recipients. Users added to the group
+later do not gain access; users removed later retain access to this notification
+subject to normal visibility, expiration, and deletion rules.

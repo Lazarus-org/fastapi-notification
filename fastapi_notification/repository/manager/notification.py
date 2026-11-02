@@ -18,6 +18,7 @@ from fastapi_notification.constants.qs_types import (
     Target,
 )
 from fastapi_notification.identity import (
+    get_identity_adapter,
     hydrate_notification_identities,
     require_staff_identity,
 )
@@ -550,6 +551,7 @@ class NotificationDataAccessLayer:
         deduplication_key_expires_at: Optional[datetime] = None,
         category: str = "general",
         priority: str = "normal",
+        group_audience_strategy: str = "dynamic",
     ) -> Notification:
         """Create a notification, optionally deduplicating a business event.
 
@@ -580,6 +582,8 @@ class NotificationDataAccessLayer:
                 be reused. ``None`` retains it until its notification is deleted.
             category (str): Built-in or application-defined category key.
             priority (str): One of ``low``, ``normal``, ``high`` or ``urgent``.
+            group_audience_strategy (str): ``dynamic`` (default) resolves current
+                membership at read time; ``snapshot`` captures members at creation.
 
         Returns:
             Notification: The newly created notification, or the original
@@ -592,6 +596,25 @@ class NotificationDataAccessLayer:
         """
         category = normalize_category(category)
         priority = normalize_priority(priority)
+        if group_audience_strategy not in {"dynamic", "snapshot"}:
+            raise ValueError("group_audience_strategy must be 'dynamic' or 'snapshot'.")
+
+        if group_audience_strategy == "snapshot" and groups:
+            adapter = get_identity_adapter()
+            group_items = list(groups) if isinstance(groups, (list, tuple, set)) else [groups]
+            snapshot_members = []
+            for group in group_items:
+                snapshot_members.extend(
+                    await adapter.get_group_user_ids(self.session, group)
+                )
+            # Persist a frozen audience as individual recipient associations.
+            existing_recipients = (
+                list(recipients)
+                if isinstance(recipients, (list, tuple, set))
+                else ([recipients] if recipients is not None else [])
+            )
+            recipients = existing_recipients + snapshot_members
+            groups = None
 
         if deduplication_key is not None:
             if not isinstance(deduplication_key, str):

@@ -390,3 +390,22 @@ def test_notification_filter_normalizes_external_user_and_group_ids():
     ]
     assert "moderators" in compiled_conditions[0]
     assert user_id in compiled_conditions[1]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_membership_requires_explicit_adapter_support():
+    adapter = IdentityAdapter()
+    with pytest.raises(NotImplementedError, match="get_group_user_ids"):
+        await adapter.get_group_user_ids(None, "engineering")
+
+
+@pytest.mark.asyncio
+async def test_custom_adapter_can_resolve_snapshot_group_members():
+    class SnapshotAdapter(IdentityAdapter):
+        async def get_group_user_ids(self, session, group):
+            assert session is None
+            return ["user-1", "user-2"]
+
+    adapter = SnapshotAdapter()
+    members = await adapter.get_group_user_ids(None, "engineering")
+    assert members == ["user-1", "user-2"]

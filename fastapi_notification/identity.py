@@ -95,6 +95,21 @@ class IdentityAdapter:
             identifier = getattr(group, self.group_id_attribute, None)
         return normalize_identity_id(identifier)
 
+    async def get_group_user_ids(
+        self, session: AsyncSession, group: Any
+    ) -> Sequence[Any]:
+        """Return current users belonging to a group for snapshot delivery.
+
+        Applications using snapshot group audiences must override this method
+        and return the member identities at creation time. The default adapter
+        deliberately refuses to guess how a host application stores membership.
+        """
+        del session, group
+        raise NotImplementedError(
+            "Snapshot group audiences require an identity adapter that "
+            "implements get_group_user_ids()."
+        )
+
     async def get_user_group_ids(
         self, session: AsyncSession, user: Any
     ) -> Sequence[str]:

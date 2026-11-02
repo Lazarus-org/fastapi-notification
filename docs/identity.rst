@@ -121,3 +121,19 @@ relations are resolved.
 Because this changes association column types and removes auth foreign keys,
 existing pre-release development databases should be recreated or migrated to
 the new schema before using this checkpoint.
+
+Group audience strategies
+--------------------------
+
+Notifications can use ``group_audience_strategy="dynamic"`` (the default) or
+``group_audience_strategy="snapshot"`` when created through the data access
+layer. Dynamic audiences retain the group association and resolve membership
+when a recipient reads the notification. Snapshot audiences resolve current
+group members at creation time and persist those users as individual recipient
+associations; later membership changes do not change that captured audience.
+
+Applications using snapshot audiences must override
+``IdentityAdapter.get_group_user_ids(session, group)`` and return the current
+member identity objects or IDs. The base adapter raises
+``NotImplementedError`` rather than assuming a host application's membership
+schema. Snapshot audiences do not retain a dynamic group grant.
