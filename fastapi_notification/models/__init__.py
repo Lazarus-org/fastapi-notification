@@ -11,6 +11,7 @@ from .deduplication import NotificationDeduplication
 from .helper.enums import NotificationCategory, NotificationPriority, NotificationStatus
 from .notification import Notification, notification_group
 from .notification_recipient import NotificationRecipient
+from .notification_preference import NotificationPreference
 from .notification_seen import NotificationSeen
 from .permissions.notification_permission import NotificationPermission
 
@@ -26,6 +27,7 @@ __all__ = [
     "NotificationPermission",
     "NotificationPriority",
     "NotificationRecipient",
+    "NotificationPreference",
     "NotificationSeen",
     "NotificationStatus",
     "Permission",

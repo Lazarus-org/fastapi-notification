@@ -270,6 +270,42 @@ class Post(Base):
     ...
 ```
 
+## Notification Delivery Preferences
+
+Users can manage their own category/channel delivery rules through the API or
+``NotificationPreferenceDataAccessLayer``. Rules support ``*`` wildcards and
+are evaluated from most-specific to least-specific. If no rule matches, the
+channel is enabled by default.
+
+```python
+from fastapi_notification import NotificationPreferenceDataAccessLayer
+
+preferences = NotificationPreferenceDataAccessLayer(session)
+await preferences.set_preference(
+    user, category="*", channel="email", enabled=False
+)
+await preferences.set_preference(
+    user, category="security", channel="email", enabled=True
+)
+
+allowed = await preferences.is_enabled(
+    user, category="security", channel="email"
+)  # True
+await session.commit()
+```
+
+The authenticated API exposes ``GET /notifications/preferences/`` to list the
+current user's rules, ``PUT`` on the same path to create/update one rule, and
+``DELETE`` with ``category`` and ``channel`` query parameters to reset a rule.
+When no stored override matches, the effective default is enabled; no synthetic
+default row is written to the database.
+
+Preferences are delivery policy, not inbox visibility: they do not delete, hide
+or mutate notifications already stored in the inbox. Delivery integrations
+should consult ``is_enabled`` before dispatching email, SMS, push, webhook or
+other channel messages. The package provides the preference store and policy
+resolver; it does not yet send those external messages itself.
+
 ## 7. Verify
 
 ```bash
@@ -314,6 +350,9 @@ The interactive documentation at `/docs` lists every route the package registere
 | GET    | `/notifications/{id}/`                   | Retrieve one unseen notification (read-only).  |
 | POST   | `/notifications/{id}/mark_as_seen/`      | Mark one notification as seen.                 |
 | POST   | `/notifications/{id}/mark_as_unseen/`    | Return one notification to the unseen inbox.   |
+| GET    | `/notifications/preferences/`            | List the current user's delivery preferences.  |
+| PUT    | `/notifications/preferences/`            | Create or update one delivery preference.      |
+| DELETE | `/notifications/preferences/`            | Reset one preference to inherited defaults.    |
 
 Retrieval, summary and preview are read-only. The summary counts sent
 notifications addressed to the current user or their groups, excluding items

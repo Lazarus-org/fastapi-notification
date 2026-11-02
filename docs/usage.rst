@@ -719,3 +719,35 @@ To freeze the audience at creation time, configure the identity adapter's
 Snapshot members are stored as individual recipients. Users added to the group
 later do not gain access; users removed later retain access to this notification
 subject to normal visibility, expiration, and deletion rules.
+
+Managing delivery preferences
+-----------------------------
+
+Preferences are scoped to the authenticated user and can be managed through
+the API or the data access layer. Rules are keyed by category and channel;
+``*`` is a wildcard. More-specific rules override broader rules, and a missing
+rule means enabled. For example, disable email globally but allow it for
+security notifications:
+
+.. code-block:: python
+
+   from fastapi_notification import NotificationPreferenceDataAccessLayer
+
+   preferences = NotificationPreferenceDataAccessLayer(session)
+   await preferences.set_preference(
+       user, category="*", channel="email", enabled=False
+   )
+   await preferences.set_preference(
+       user, category="security", channel="email", enabled=True
+   )
+
+   allowed = await preferences.is_enabled(
+       user, category="security", channel="email"
+   )  # True
+
+   await session.commit()
+
+Call ``reset_preference`` to remove an override and restore inherited behavior.
+Preferences do not erase or hide inbox records; they are consulted by delivery
+workflows before dispatching a channel message. See the Notification
+preferences section in :doc:`api_guide` for the endpoint contract.

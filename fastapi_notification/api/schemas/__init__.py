@@ -2,6 +2,11 @@ from .base import BaseSerializer
 from .dynamic_notification import NotificationDynamicSerializer
 from .group import GroupSerializer, PermissionSerializer
 from .notification import NotificationSerializer
+from .notification_preference import (
+    NotificationPreferenceItem,
+    NotificationPreferenceList,
+    NotificationPreferenceUpdate,
+)
 from .notification_summary import (
     NotificationCountBreakdown,
     NotificationPreviewItem,
@@ -18,6 +23,9 @@ __all__ = [
     "NotificationSerializer",
     "NotificationPreviewItem",
     "NotificationPreviewResponse",
+    "NotificationPreferenceItem",
+    "NotificationPreferenceList",
+    "NotificationPreferenceUpdate",
     "NotificationSummaryResponse",
     "PermissionSerializer",
     "UserSerializer",

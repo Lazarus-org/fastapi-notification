@@ -477,3 +477,54 @@ returns the original notification without changing its recipients or content.
 See :ref:`idempotent-notification-creation` in the usage guide for the full
 contract and expiration behavior.
 
+
+Notification preferences
+-------------------------
+
+Users can manage their own delivery preferences through three authenticated
+endpoints:
+
+.. code-block:: http
+
+   GET    /notifications/preferences/
+   PUT    /notifications/preferences/
+   DELETE /notifications/preferences/?category=orders&channel=email
+
+``GET`` returns the caller's stored rules. ``PUT`` creates or replaces one rule
+using a JSON body:
+
+.. code-block:: json
+
+   {"category": "orders", "channel": "email", "enabled": false}
+
+Use ``"*"`` for a wildcard category or channel. For example,
+``{"category":"*","channel":"email","enabled":false}`` disables email
+for all categories unless a more-specific rule overrides it. ``DELETE`` removes
+the specified rule; omitting both query parameters resets the global wildcard
+rule. A missing rule defaults to enabled.
+
+Rule precedence is, in order: exact category and channel; exact category and
+wildcard channel; wildcard category and exact channel; global wildcard. Category
+and channel keys are normalized to lowercase and may contain lowercase letters,
+digits, dots, underscores and hyphens. Custom channel names are supported.
+
+Preferences are delivery policy, not inbox visibility. They do not delete,
+hide, or change notifications already persisted for the user. A delivery
+integration should consult ``NotificationPreferenceDataAccessLayer.is_enabled``
+before dispatching a channel message:
+
+.. code-block:: python
+
+   from fastapi_notification import NotificationPreferenceDataAccessLayer
+
+   preferences = NotificationPreferenceDataAccessLayer(session)
+   if await preferences.is_enabled(
+       user, category=notification.category, channel="email"
+   ):
+       await email_provider.send(notification)
+
+The package currently provides the preference store and policy resolver; it
+does not itself send email, SMS, push or webhook messages. Delivery adapters
+introduced by later integrations can use the same resolver. The in-app inbox
+remains available independently of a channel preference unless the host
+application explicitly chooses otherwise in its delivery workflow.

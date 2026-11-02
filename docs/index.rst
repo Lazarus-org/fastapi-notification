@@ -103,6 +103,7 @@ The documentation is organized into the following sections:
    api_guide
    usage
    taxonomy
+   preferences
    concurrency
    settings
    identity

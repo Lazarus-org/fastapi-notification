@@ -12,10 +12,18 @@ from fastapi_notification.api.dependencies.db import get_session
 from fastapi_notification.api.filters.notification_filter import NotificationFilter
 from fastapi_notification.api.routes.base import BaseNotificationRoutes
 from fastapi_notification.api.schemas.notification import NotificationSerializer
+from fastapi_notification.api.schemas.notification_preference import (
+    NotificationPreferenceItem,
+    NotificationPreferenceList,
+    NotificationPreferenceUpdate,
+)
 from fastapi_notification.api.schemas.notification_summary import (
     NotificationPreviewItem,
     NotificationPreviewResponse,
     NotificationSummaryResponse,
+)
+from fastapi_notification.repository.manager.preferences import (
+    NotificationPreferenceDataAccessLayer,
 )
 from fastapi_notification.utils.serialization import generate_title
 
@@ -123,6 +131,77 @@ def create_notification_router(
         tags=list(tags) if tags else ["notifications"],
         dependencies=routes.dependencies,
     )
+
+    @router.get(
+        "/preferences/",
+        response_model=NotificationPreferenceList,
+        summary="List the current user's notification preferences",
+    )
+    async def list_notification_preferences(
+        session: AsyncSession = Depends(session_dep),
+        user: Any = Depends(user_dep),
+    ) -> Dict[str, Any]:
+        """Return only the preference rules owned by the authenticated user."""
+        preferences = await NotificationPreferenceDataAccessLayer(
+            session
+        ).list_for_user(user)
+        return NotificationPreferenceList(
+            results=[
+                NotificationPreferenceItem.model_validate(item)
+                for item in preferences
+            ]
+        ).model_dump()
+
+    @router.put(
+        "/preferences/",
+        response_model=NotificationPreferenceItem,
+        summary="Create or update one notification preference",
+    )
+    async def set_notification_preference(
+        payload: NotificationPreferenceUpdate,
+        session: AsyncSession = Depends(session_dep),
+        user: Any = Depends(user_dep),
+    ) -> Dict[str, Any]:
+        """Set a category/channel delivery rule for the current user."""
+        preference = await NotificationPreferenceDataAccessLayer(
+            session
+        ).set_preference(
+            user,
+            category=payload.category,
+            channel=payload.channel,
+            enabled=payload.enabled,
+        )
+        response_payload = NotificationPreferenceItem.model_validate(
+            preference
+        ).model_dump()
+        await session.commit()
+        return response_payload
+
+    @router.delete(
+        "/preferences/",
+        status_code=status.HTTP_204_NO_CONTENT,
+        summary="Reset one notification preference",
+    )
+    async def reset_notification_preference(
+        category: str = Query(
+            "*",
+            max_length=64,
+            pattern=r"^(\*|[A-Za-z0-9][A-Za-z0-9._-]{0,63})$",
+        ),
+        channel: str = Query(
+            "*",
+            max_length=64,
+            pattern=r"^(\*|[A-Za-z0-9][A-Za-z0-9._-]{0,63})$",
+        ),
+        session: AsyncSession = Depends(session_dep),
+        user: Any = Depends(user_dep),
+    ) -> Response:
+        """Remove a rule and restore inherited/default delivery behavior."""
+        await NotificationPreferenceDataAccessLayer(session).reset_preference(
+            user, category=category, channel=channel
+        )
+        await session.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     if routes.is_method_enabled("LIST"):
 
