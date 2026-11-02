@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 from sqlalchemy import (
@@ -40,6 +41,7 @@ from fastapi_notification.models.deleted_notification import DeletedNotification
 from fastapi_notification.models.notification import Notification, notification_group
 from fastapi_notification.models.notification_recipient import NotificationRecipient
 from fastapi_notification.models.notification_seen import NotificationSeen
+from fastapi_notification.models.base import utcnow
 from fastapi_notification.models.state import insert_many_from_select_if_absent
 
 
@@ -143,11 +145,25 @@ class NotificationQuerySet:
             )
         return Notification.id.in_(subquery)
 
+    def not_expired_condition(
+        self, as_of: Optional[datetime] = None
+    ) -> ColumnElement[bool]:
+        """Match notifications without an expiry or expiring after ``as_of``."""
+        instant = as_of or utcnow()
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            raise ValueError(
+                "The expiration comparison instant must be timezone-aware."
+            )
+        instant = instant.astimezone(timezone.utc)
+        return or_(Notification.expires_at.is_(None), Notification.expires_at > instant)
+
     def _notifications_statement(
         self,
         exclude_deleted_by: Recipient = None,
         display_detail: bool = False,
         conditions: OptConditions = None,
+        include_expired: bool = False,
+        as_of: Optional[datetime] = None,
     ) -> Select:
         """Build the base statement shared by every notification query.
 
@@ -182,6 +198,9 @@ class NotificationQuerySet:
                 ~self.deleted_condition(deleted_by=exclude_deleted_by)
             )
 
+        if not include_expired:
+            statement = statement.where(self.not_expired_condition(as_of))
+
         for condition in conditions or []:
             statement = statement.where(condition)
 
@@ -195,8 +214,8 @@ class NotificationQuerySet:
     ) -> Select:
         """Build a statement returning every notification.
 
-        This is the unfiltered view: soft deleted notifications are included,
-        since no viewer is given to exclude them for.
+        This is the unfiltered view: soft-deleted and expired notifications are
+        included, since no recipient inbox visibility policy is applied.
 
         Args:
             recipients (Recipients): The recipients of the notifications.
@@ -214,7 +233,9 @@ class NotificationQuerySet:
             conditions.append(self.group_condition(groups))
 
         return self._notifications_statement(
-            display_detail=display_detail, conditions=conditions
+            display_detail=display_detail,
+            conditions=conditions,
+            include_expired=True,
         )
 
     def _sent_statement(
@@ -225,6 +246,7 @@ class NotificationQuerySet:
         groups: Groups = None,
         display_detail: bool = False,
         conditions: OptConditions = None,
+        include_expired: bool = False,
     ) -> Select:
         """Build a statement for notifications in a given delivery state.
 
@@ -243,6 +265,8 @@ class NotificationQuerySet:
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are selected.
             conditions (OptConditions): Extra conditions to apply.
+            include_expired (bool): Include expired rows for explicit administrative
+                or historical queries. Recipient inbox queries should leave this off.
 
         Returns:
             Select: The statement.
@@ -267,6 +291,7 @@ class NotificationQuerySet:
             exclude_deleted_by=exclude_deleted_by,
             display_detail=display_detail,
             conditions=all_conditions,
+            include_expired=include_expired,
         )
 
     def sent(
@@ -276,6 +301,7 @@ class NotificationQuerySet:
         groups: Groups = None,
         display_detail: bool = False,
         conditions: OptConditions = None,
+        include_expired: bool = False,
     ) -> Select:
         """Build a statement returning sent notifications.
 
@@ -286,13 +312,21 @@ class NotificationQuerySet:
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are selected.
             conditions (OptConditions): Extra conditions to apply.
+            include_expired (bool): Include expired rows for explicit historical
+                or administrative queries.
 
         Returns:
             Select: The statement.
 
         """
         return self._sent_statement(
-            True, recipients, exclude_deleted_by, groups, display_detail, conditions
+            True,
+            recipients,
+            exclude_deleted_by,
+            groups,
+            display_detail,
+            conditions,
+            include_expired,
         )
 
     def unsent(
@@ -302,6 +336,7 @@ class NotificationQuerySet:
         groups: Groups = None,
         display_detail: bool = False,
         conditions: OptConditions = None,
+        include_expired: bool = False,
     ) -> Select:
         """Build a statement returning unsent notifications.
 
@@ -312,13 +347,21 @@ class NotificationQuerySet:
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are selected.
             conditions (OptConditions): Extra conditions to apply.
+            include_expired (bool): Include expired rows for explicit historical
+                or administrative queries.
 
         Returns:
             Select: The statement.
 
         """
         return self._sent_statement(
-            False, recipients, exclude_deleted_by, groups, display_detail, conditions
+            False,
+            recipients,
+            exclude_deleted_by,
+            groups,
+            display_detail,
+            conditions,
+            include_expired,
         )
 
     def seen(
@@ -446,6 +489,7 @@ class NotificationQuerySet:
                 Notification.status,
                 Notification.link,
                 Notification.timestamp,
+                Notification.expires_at,
                 self.seen_condition(user).label("is_seen"),
             )
             .order_by(None)
@@ -463,12 +507,13 @@ class NotificationQuerySet:
             display_detail (bool): Whether whole notifications are selected.
 
         Returns:
-            Select: The statement.
+            Select: The statement, including expired rows for historical inspection.
 
         """
         return self._notifications_statement(
             display_detail=display_detail,
             conditions=[self.deleted_condition(deleted_by=deleted_by)],
+            include_expired=True,
         )
 
 
@@ -525,6 +570,7 @@ async def create_notification(
     link: Link = None,
     is_sent: bool = False,
     data: Data = None,
+    expires_at: Optional[datetime] = None,
 ) -> Notification:
     """Create a notification, resolving its generic relations.
 
@@ -543,11 +589,19 @@ async def create_notification(
         link (Link): The link of the notification.
         is_sent (bool): The send status of the notification. Defaults to False.
         data (Data): Arbitrary JSON data for the notification.
+        expires_at (Optional[datetime]): Optional timezone-aware expiration instant.
 
     Returns:
         Notification: The created notification.
 
     """
+    if expires_at is not None:
+        if not isinstance(expires_at, datetime):
+            raise TypeError("expires_at must be a datetime or None.")
+        if expires_at.tzinfo is None or expires_at.utcoffset() is None:
+            raise ValueError("expires_at must be timezone-aware.")
+        expires_at = expires_at.astimezone(timezone.utc)
+
     actor_content_type = await ContentType.get_for_model(session, type(actor))
 
     target_content_type = (
@@ -569,6 +623,7 @@ async def create_notification(
         link=link,
         is_sent=is_sent,
         data=data,
+        expires_at=expires_at,
         actor_content_type_id=actor_content_type.id,
         actor_object_id=normalize_object_id(actor.id),
         target_content_type_id=(
@@ -606,6 +661,8 @@ async def update_notification(
     is_sent: Optional[bool] = None,
     public: Optional[bool] = None,
     data: Data = None,
+    expires_at: Optional[datetime] = None,
+    clear_expires_at: bool = False,
 ) -> Notification:
     """Update the given fields of a notification, leaving the rest untouched.
 
@@ -615,6 +672,8 @@ async def update_notification(
         is_sent (Optional[bool]): The send status. Left alone when ``None``.
         public (Optional[bool]): The public status. Left alone when ``None``.
         data (Data): The notification data. Left alone when ``None``.
+        expires_at (Optional[datetime]): New timezone-aware expiry instant.
+        clear_expires_at (bool): Clear the expiry when True.
 
     Returns:
         Notification: The updated notification.
@@ -623,6 +682,15 @@ async def update_notification(
         LookupError: If no notification has the given ID.
 
     """
+    if expires_at is not None and clear_expires_at:
+        raise ValueError("Set expires_at or clear it, not both.")
+    if expires_at is not None:
+        if not isinstance(expires_at, datetime):
+            raise TypeError("expires_at must be a datetime or None.")
+        if expires_at.tzinfo is None or expires_at.utcoffset() is None:
+            raise ValueError("expires_at must be timezone-aware.")
+        expires_at = expires_at.astimezone(timezone.utc)
+
     notification = await session.get(Notification, notification_id)
     if notification is None:
         raise LookupError(f"No notification found with id {notification_id}.")
@@ -633,6 +701,10 @@ async def update_notification(
         notification.public = public
     if data is not None:
         notification.data = data
+    if expires_at is not None:
+        notification.expires_at = expires_at
+    elif clear_expires_at:
+        notification.expires_at = None
 
     await session.flush()
     return notification
@@ -826,6 +898,80 @@ async def delete_many(
     await session.flush()
 
     return len(identifiers)
+
+
+async def purge_expired(
+    session: AsyncSession,
+    expired_before: datetime,
+    *,
+    limit: Optional[int] = None,
+    actor: Any = None,
+) -> int:
+    """Permanently purge expired notifications older than an explicit cutoff.
+
+    This is an opt-in maintenance operation. Expiration alone never deletes
+    records; callers choose the retention cutoff and invoke this method
+    explicitly. Related recipient, group, seen and soft-delete rows are removed
+    before the notification rows so the operation also works on SQLite
+    connections where foreign-key enforcement is not enabled.
+    """
+    require_staff_identity(actor)
+    if not isinstance(expired_before, datetime):
+        raise TypeError("expired_before must be a datetime.")
+    if expired_before.tzinfo is None or expired_before.utcoffset() is None:
+        raise ValueError("expired_before must be timezone-aware.")
+    expired_before = expired_before.astimezone(timezone.utc)
+    if expired_before > utcnow():
+        raise ValueError("expired_before must not be in the future.")
+    if limit is not None and (
+        isinstance(limit, bool) or not isinstance(limit, int) or limit < 1
+    ):
+        raise ValueError("limit must be a positive integer or None.")
+
+    statement = (
+        select(Notification.id)
+        .where(
+            Notification.expires_at.is_not(None),
+            Notification.expires_at <= expired_before,
+        )
+        .order_by(Notification.expires_at.asc(), Notification.id.asc())
+    )
+    if limit is not None:
+        statement = statement.limit(limit)
+
+    result = await session.execute(statement)
+    notification_ids = list(result.scalars().all())
+    if not notification_ids:
+        return 0
+
+    await session.execute(
+        delete(NotificationSeen).where(
+            NotificationSeen.notification_id.in_(notification_ids)
+        )
+    )
+    await session.execute(
+        delete(DeletedNotification).where(
+            DeletedNotification.notification_id.in_(notification_ids)
+        )
+    )
+    await session.execute(
+        delete(NotificationRecipient).where(
+            NotificationRecipient.notification_id.in_(notification_ids)
+        )
+    )
+    await session.execute(
+        delete(notification_group).where(
+            notification_group.c.notification_id.in_(notification_ids)
+        )
+    )
+    delete_result = await session.execute(
+        delete(Notification).where(Notification.id.in_(notification_ids))
+    )
+    await session.flush()
+    deleted_count = getattr(delete_result, "rowcount", None)
+    if deleted_count is None or deleted_count < 0:
+        return len(notification_ids)
+    return int(deleted_count)
 
 
 async def add_recipients(

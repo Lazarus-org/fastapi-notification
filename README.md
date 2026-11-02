@@ -17,6 +17,7 @@ It is built on async SQLAlchemy 2.0 and Pydantic v2, and it is the FastAPI count
 ## Highlights
 
 - **Notification inbox and activity history** — unseen notifications, seen activity, aggregate read/unread counts, and a bounded recent preview.
+- **Notification expiration** — optional timezone-aware expiry with explicit, retention-controlled cleanup.
 - **Anything can be an actor** — notifications reference an actor, a target and an action object generically, so any of your own models can take those roles. Generic relations support integer, UUID and string primary keys.
 - **Addressed to users or groups** — a notification reaches named recipients, every member of a group, or both.
 - **Soft and hard deletion** — clearing a notification hides it for one user while leaving it intact for the others; permanent deletion is available to administrators and off by default.
@@ -211,6 +212,8 @@ Configure the package **before** building the router: the router reads its setti
 ## 6. Create Notifications
 
 ```python
+from datetime import datetime, timedelta, timezone
+
 from fastapi_notification import NotificationDataAccessLayer
 
 async with Session() as session:
@@ -227,6 +230,7 @@ async with Session() as session:
         link="https://example.com/posts/123",
         is_sent=True,
         data={"post_id": 123},
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
     )
 
     await session.commit()
@@ -294,7 +298,8 @@ Retrieval, summary and preview are read-only. The summary counts sent
 notifications addressed to the current user or their groups, excluding items
 the user has cleared. It returns ``total``, ``unread`` and ``read`` counts. The
 preview returns the most recent visible notifications (5 by default, at most
-20), including an ``is_seen`` flag for each item. Both endpoints honor inbox
+20), including an ``is_seen`` flag and nullable ``expires_at`` for each item.
+Both endpoints honor inbox
 filter conditions; preview is always ordered newest first. Use the explicit
 POST action to mark a notification as seen;
 repeating the action is harmless. Use ``POST /notifications/{id}/mark_as_unseen/``
@@ -344,6 +349,38 @@ Listings are wrapped in an envelope and paged with `limit` and `offset`:
 | `ordering`         | Order by a field in `API_ORDERING_FIELDS`; prefix `-` to reverse. |
 
 Ordering is restricted to the configured fields, so a client cannot sort by an arbitrary column.
+
+## Expiration and Retention
+
+A notification may have an optional timezone-aware ``expires_at`` instant. At
+``expires_at`` itself it is considered expired. Expired notifications are
+excluded from recipient inboxes, activity history, summaries, previews, and
+normal unsent delivery queries. Direct and group audiences follow the same rule.
+Raw/all and deleted-history DAL queries can still include expired rows for audit.
+
+Expiration does not delete historical rows. Cleanup is explicit and staff-only;
+the caller chooses the retention cutoff and optional batch size:
+
+```python
+from datetime import datetime, timedelta, timezone
+
+cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+purged = await dal.purge_expired(
+    expired_before=cutoff,
+    limit=500,
+    actor=staff_user,
+)
+await session.commit()
+```
+
+This example removes only notifications whose expiry instant is at least 30
+days old. The DAL never commits the transaction. The package does not start a
+scheduler; invoke the cleanup method from your application's scheduled task if
+you want recurring retention cleanup.
+
+The nullable ``notification.expires_at`` column is a pre-release schema addition.
+``Base.metadata.create_all()`` does not alter an existing table; add the nullable column and its index
+through your migration process or recreate development tables before upgrading.
 
 ## Throttling
 

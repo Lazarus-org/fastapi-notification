@@ -138,6 +138,7 @@ async def test_summary_and_preview_execute_with_sqlite() -> None:
                 "status",
                 "link",
                 "timestamp",
+                "expires_at",
                 "is_seen",
             }
 

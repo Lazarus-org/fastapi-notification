@@ -65,6 +65,8 @@ recipients and groups given.
 
 .. code-block:: python
 
+   from datetime import datetime, timedelta, timezone
+
    notification = await dal.create_notification(
        verb="commented on",
        actor=alice,
@@ -78,6 +80,7 @@ recipients and groups given.
        link="https://example.com/posts/123#comment-7",
        is_sent=True,
        data={"post_id": 123, "comment_id": 7},
+       expires_at=datetime.now(timezone.utc) + timedelta(days=30),
    )
 
    await session.commit()
@@ -123,6 +126,53 @@ Only ``verb`` and ``actor`` are required. The parameters are:
 
 ``data`` (``Optional[Dict[str, Any]]``, default ``None``)
     Arbitrary JSON stored alongside the notification.
+
+``expires_at`` (``Optional[datetime]``, default ``None``)
+    Optional timezone-aware expiration instant. Naive datetimes are rejected;
+    aware values are normalized to UTC. Expired notifications are hidden from
+    normal recipient queries but retained in the database.
+
+Expiration and Retention
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Expiration is optional. When ``expires_at`` is set, the notification becomes
+unavailable to recipients at that exact instant. The rule is applied to direct
+recipients and group recipients alike, and affects inboxes, activities,
+summary/preview queries, and normal unsent-delivery queries. Expired items
+cannot be marked as seen or unseen.
+
+Expiration is not deletion. Raw ``all_notifications()`` queries and deleted
+history can still be used for audit purposes. Permanent cleanup is an explicit
+staff-only operation, and the caller chooses the retention cutoff:
+
+.. code-block:: python
+
+   from datetime import datetime, timedelta, timezone
+
+   cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+   purged = await dal.purge_expired(
+       expired_before=cutoff,
+       limit=500,
+       actor=staff_user,
+   )
+   await session.commit()
+
+Only notifications whose ``expires_at`` is at or before ``cutoff`` are
+permanently removed. Related recipient, group, seen and soft-delete association
+rows are removed with them. The DAL does not commit the caller's transaction.
+The package does not start a scheduler; call this method from your application's
+scheduled task if you want recurring retention cleanup.
+
+The nullable ``notification.expires_at`` column is a pre-release schema addition.
+``Base.metadata.create_all()`` does not alter an existing table; add the nullable column and its index
+through your migration process or recreate development tables before upgrading.
+
+``update_notification()`` can change ``expires_at`` or clear it explicitly:
+
+.. code-block:: python
+
+   await dal.update_notification(notification.id, expires_at=new_expiry)
+   await dal.update_notification(notification.id, clear_expires_at=True)
 
 Generated descriptions
 ~~~~~~~~~~~~~~~~~~~~~~

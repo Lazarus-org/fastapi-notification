@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List, Optional
 
 from sqlalchemy import (
@@ -21,7 +21,7 @@ from fastapi_notification.identity import (
     hydrate_notification_identities,
 )
 from fastapi_notification.models.associations import notification_group
-from fastapi_notification.models.base import Base, utcnow
+from fastapi_notification.models.base import Base, UTCDateTime, utcnow
 from fastapi_notification.models.content_type import (
     ContentType,
     normalize_object_id,
@@ -64,6 +64,7 @@ class Notification(Base):
         public (bool): Indicates if the notification is public.
         data (Optional[dict]): Additional metadata associated with the notification.
         timestamp (datetime): Time when the notification was created.
+        expires_at (Optional[datetime]): Optional UTC-aware expiration instant.
 
     """
 
@@ -181,6 +182,15 @@ class Notification(Base):
         index=True,
         comment="The date and time when this notification was created.",
     )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(),
+        nullable=True,
+        index=True,
+        comment=(
+            "Optional timezone-aware instant after which the notification is no "
+            "longer visible or actionable for recipients."
+        ),
+    )
 
     # These collections are transient identity projections populated by the
     # configured adapter. They deliberately are not ORM relationships: the
@@ -228,6 +238,40 @@ class Notification(Base):
     actor: ClassVar[Any] = None
     target: ClassVar[Any] = None
     action_object: ClassVar[Any] = None
+
+    @validates("expires_at")
+    def _validate_expires_at(
+        self, key: str, value: Optional[datetime]
+    ) -> Optional[datetime]:
+        """Require explicit timezone information and normalize expiration to UTC."""
+        del key
+        if value is None:
+            return None
+        if not isinstance(value, datetime):
+            raise TypeError("expires_at must be a datetime or None.")
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("expires_at must be timezone-aware.")
+        return value.astimezone(timezone.utc)
+
+    def is_expired(self, at: Optional[datetime] = None) -> bool:
+        """Return whether the notification has expired at the supplied instant.
+
+        SQLite does not preserve timezone metadata when reading ``DateTime``
+        values. Naive values loaded from that backend are therefore interpreted
+        as UTC; values supplied by callers must remain timezone-aware.
+        """
+        if self.expires_at is None:
+            return False
+
+        current = at or utcnow()
+        if current.tzinfo is None or current.utcoffset() is None:
+            raise ValueError("The comparison instant must be timezone-aware.")
+
+        expiration = self.expires_at
+        if expiration.tzinfo is None or expiration.utcoffset() is None:
+            expiration = expiration.replace(tzinfo=timezone.utc)
+
+        return expiration <= current.astimezone(timezone.utc)
 
     @validates(
         "actor_object_id", "target_object_id", "action_object_object_id"

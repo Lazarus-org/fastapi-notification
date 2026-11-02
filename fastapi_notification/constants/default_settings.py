@@ -5,7 +5,9 @@ from typing import List, Optional
 @dataclass(frozen=True)
 class DefaultSerializerSettings:
     notification_serializer_fields: Optional[List[str]] = field(
-        default_factory=lambda: ["id", "description", "status", "link", "timestamp"]
+        default_factory=lambda: [
+            "id", "description", "status", "link", "timestamp", "expires_at"
+        ]
     )
     notification_serializer_class: Optional[str] = None
     user_serializer_fields: List[str] = field(default_factory=lambda: ["id"])

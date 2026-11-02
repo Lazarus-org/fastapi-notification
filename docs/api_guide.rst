@@ -106,7 +106,9 @@ their groups. Notifications cleared by that user are excluded. The response is:
    }
 
 The preview endpoint returns up to 20 recent notifications (5 by default),
-including both read and unread items. Each item includes an ``is_seen`` flag.
+including both read and unread items. Each item includes an ``is_seen`` flag
+and nullable ``expires_at`` timestamp. Expired notifications are excluded from
+inbox, activity, summary and preview responses, including group-addressed items.
 It selects only the fields needed for the preview, does not hydrate generic
 relations, and uses the same audience restrictions and filter conditions as
 the inbox. Preview order is always newest first, regardless of an ``ordering``
@@ -125,6 +127,7 @@ and 20. A preview response looks like this:
          "status": "INFO",
          "link": "https://example.com/posts/42",
          "timestamp": "2026-11-01T12:00:00Z",
+         "expires_at": null,
          "is_seen": false
        }
      ]
@@ -223,7 +226,8 @@ representation. Staff and superuser roles do not reveal additional fields:
          "seen_by": [],
          "public": true,
          "data": {"post_id": 123},
-         "timestamp": "2026-07-20T12:00:00Z"
+         "timestamp": "2026-07-20T12:00:00Z",
+         "expires_at": null
        }
      ]
    }
@@ -247,7 +251,8 @@ database with a narrower query:
          "description": "alice liked your post my-first-post",
          "status": "INFO",
          "link": "https://example.com/posts/123",
-         "timestamp": "2026-07-20T12:00:00Z"
+         "timestamp": "2026-07-20T12:00:00Z",
+         "expires_at": null
        }
      ]
    }

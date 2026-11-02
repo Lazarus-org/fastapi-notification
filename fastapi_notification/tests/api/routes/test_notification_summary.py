@@ -178,6 +178,7 @@ async def test_preview_returns_recent_read_and_unread_items(
         "status",
         "link",
         "timestamp",
+        "expires_at",
         "is_seen",
     }
 

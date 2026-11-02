@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import Select
@@ -50,6 +51,7 @@ class NotificationDataAccessLayer:
         deleted: Retrieves all deleted notifications, optionally filtered by user.
         summary: Returns aggregate total, unread and read notification counts.
         preview: Returns a bounded set of recent notifications with read state.
+        purge_expired: Explicitly removes expired notifications after retention.
         clear_all: Clears all seen notifications for a user, marking them deleted.
 
     """
@@ -115,6 +117,7 @@ class NotificationDataAccessLayer:
         groups: Groups = None,
         display_detail: bool = False,
         conditions: OptConditions = None,
+        include_expired: bool = False,
     ) -> Select:
         """Build the statement returning sent notifications.
 
@@ -125,13 +128,19 @@ class NotificationDataAccessLayer:
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are selected.
             conditions (OptConditions): Extra conditions to apply.
+            include_expired (bool): Include expired rows for historical queries.
 
         Returns:
             Select: The statement.
 
         """
         return self.query_set.sent(
-            recipients, exclude_deleted_by, groups, display_detail, conditions
+            recipients,
+            exclude_deleted_by,
+            groups,
+            display_detail,
+            conditions,
+            include_expired,
         )
 
     def unsent_statement(
@@ -141,6 +150,7 @@ class NotificationDataAccessLayer:
         groups: Groups = None,
         display_detail: bool = False,
         conditions: OptConditions = None,
+        include_expired: bool = False,
     ) -> Select:
         """Build the statement returning unsent notifications.
 
@@ -151,13 +161,19 @@ class NotificationDataAccessLayer:
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are selected.
             conditions (OptConditions): Extra conditions to apply.
+            include_expired (bool): Include expired rows for historical queries.
 
         Returns:
             Select: The statement.
 
         """
         return self.query_set.unsent(
-            recipients, exclude_deleted_by, groups, display_detail, conditions
+            recipients,
+            exclude_deleted_by,
+            groups,
+            display_detail,
+            conditions,
+            include_expired,
         )
 
     def seen_statement(
@@ -262,6 +278,7 @@ class NotificationDataAccessLayer:
         groups: Groups = None,
         display_detail: bool = False,
         conditions: OptConditions = None,
+        include_expired: bool = False,
     ) -> Union[List[Notification], Rows]:
         """Return all sent notifications.
 
@@ -272,6 +289,7 @@ class NotificationDataAccessLayer:
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are returned.
             conditions (OptConditions): Extra conditions to apply.
+            include_expired (bool): Include expired rows for historical inspection.
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
@@ -279,7 +297,12 @@ class NotificationDataAccessLayer:
         """
         return await self._execute(
             self.sent_statement(
-                recipients, exclude_deleted_by, groups, display_detail, conditions
+                recipients,
+                exclude_deleted_by,
+                groups,
+                display_detail,
+                conditions,
+                include_expired,
             ),
             display_detail,
         )
@@ -291,6 +314,7 @@ class NotificationDataAccessLayer:
         groups: Groups = None,
         display_detail: bool = False,
         conditions: OptConditions = None,
+        include_expired: bool = False,
     ) -> Union[List[Notification], Rows]:
         """Return all unsent notifications.
 
@@ -301,6 +325,7 @@ class NotificationDataAccessLayer:
             groups (Groups): The groups of the notifications.
             display_detail (bool): Whether whole notifications are returned.
             conditions (OptConditions): Extra conditions to apply.
+            include_expired (bool): Include expired rows for historical inspection.
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
@@ -308,7 +333,12 @@ class NotificationDataAccessLayer:
         """
         return await self._execute(
             self.unsent_statement(
-                recipients, exclude_deleted_by, groups, display_detail, conditions
+                recipients,
+                exclude_deleted_by,
+                groups,
+                display_detail,
+                conditions,
+                include_expired,
             ),
             display_detail,
         )
@@ -484,6 +514,7 @@ class NotificationDataAccessLayer:
         link: Optional[Link] = None,
         is_sent: bool = False,
         data: Optional[Data] = None,
+        expires_at: Optional[datetime] = None,
     ) -> Notification:
         """Create a new notification with the provided details.
 
@@ -518,6 +549,7 @@ class NotificationDataAccessLayer:
             link=link,
             is_sent=is_sent,
             data=data,
+            expires_at=expires_at,
         )
 
         if recipients:
@@ -534,6 +566,8 @@ class NotificationDataAccessLayer:
         is_sent: Optional[bool] = None,
         public: Optional[bool] = None,
         data: Optional[Data] = None,
+        expires_at: Optional[datetime] = None,
+        clear_expires_at: bool = False,
     ) -> Notification:
         """Update specified fields of an existing notification.
 
@@ -542,13 +576,21 @@ class NotificationDataAccessLayer:
             is_sent (Optional[bool]): The sent status to update.
             public (Optional[bool]): The public visibility to update.
             data (Optional[Data]): Any additional data to update.
+            expires_at (Optional[datetime]): New expiration instant.
+            clear_expires_at (bool): Explicitly remove the current expiration.
 
         Returns:
             Notification: The updated notification instance.
 
         """
         return await queryset.update_notification(
-            self.session, notification_id, is_sent, public, data
+            self.session,
+            notification_id,
+            is_sent,
+            public,
+            data,
+            expires_at,
+            clear_expires_at,
         )
 
     async def delete_notification(
@@ -628,6 +670,31 @@ class NotificationDataAccessLayer:
 
         """
         return await queryset.mark_all_as_seen(self.session, user)
+
+    async def purge_expired(
+        self,
+        expired_before: datetime,
+        *,
+        limit: Optional[int] = None,
+        actor: Any = None,
+    ) -> int:
+        """Permanently remove expired notifications older than a chosen cutoff.
+
+        Expired rows are retained by default. This method is an explicit
+        administrative cleanup operation; the caller controls the retention
+        period by choosing ``expired_before`` and owns the transaction commit.
+
+        Args:
+            expired_before (datetime): Timezone-aware cutoff for expiration.
+            limit (Optional[int]): Optional maximum number of rows to purge.
+            actor (Any): Staff identity performing the cleanup.
+
+        Returns:
+            int: Number of notifications permanently removed.
+        """
+        return await queryset.purge_expired(
+            self.session, expired_before, limit=limit, actor=actor
+        )
 
     async def clear_all(self, user: Any) -> None:
         """Soft-delete every seen notification addressed to a user or their groups.

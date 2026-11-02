@@ -60,6 +60,7 @@ class NotificationPermission:
         """Validate permission using already hydrated identity collections."""
         if not self.user_has_permission(user):
             self._raise_permission_error(user, action)
+        self._validate_expiration(action)
 
     async def validate_permission_async(
         self, session: AsyncSession, user: Any, action: str
@@ -75,6 +76,7 @@ class NotificationPermission:
             )
         )
         if recipient_result.scalar_one_or_none() is not None:
+            self._validate_expiration(action)
             return
 
         group_ids = await adapter.get_user_group_ids(session, user)
@@ -86,9 +88,18 @@ class NotificationPermission:
                 )
             )
             if group_result.scalar_one_or_none() is not None:
+                self._validate_expiration(action)
                 return
 
         self._raise_permission_error(user, action)
+
+    def _validate_expiration(self, action: str) -> None:
+        """Prevent read-state changes after a notification expires."""
+        if (
+            action in {"mark as seen", "mark as unseen"}
+            and getattr(self.notification, "is_expired", lambda: False)()
+        ):
+            raise PermissionError(f"An expired notification cannot be {action}.")
 
     def _raise_permission_error(self, user: Any, action: str) -> None:
         """Log and raise a consistent permission error."""

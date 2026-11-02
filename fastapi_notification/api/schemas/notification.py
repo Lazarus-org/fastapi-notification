@@ -29,6 +29,7 @@ class NotificationSerializer(BaseSerializer):
         public (Optional[bool]): Whether the notification is public.
         data (Optional[Dict[str, Any]]): Additional data.
         timestamp (Optional[datetime]): Time when it was created.
+        expires_at (Optional[datetime]): Optional notification expiration.
 
     """
 
@@ -47,6 +48,7 @@ class NotificationSerializer(BaseSerializer):
     public: Optional[bool] = None
     data: Optional[Dict[str, Any]] = None
     timestamp: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
 
     @classmethod
     def to_representation(cls, instance: Any) -> Dict[str, Any]:
@@ -86,6 +88,7 @@ class NotificationSerializer(BaseSerializer):
             "public": instance.public,
             "data": instance.data,
             "timestamp": instance.timestamp,
+            "expires_at": instance.expires_at,
         }
 
         return super().to_representation(payload)

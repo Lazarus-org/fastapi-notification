@@ -104,7 +104,15 @@ async def test_list_serves_summary_fields_to_regular_users(
 
     result = (await client.get("/notifications/")).json()["results"][0]
 
-    assert set(result) == {"title", "id", "description", "status", "link", "timestamp"}
+    assert set(result) == {
+        "title",
+        "id",
+        "description",
+        "status",
+        "link",
+        "timestamp",
+        "expires_at",
+    }
 
 
 async def test_staff_get_the_same_default_representation_for_their_own_notifications(
@@ -124,7 +132,15 @@ async def test_staff_get_the_same_default_representation_for_their_own_notificat
 
     result = (await client.get("/notifications/")).json()["results"][0]
 
-    assert set(result) == {"title", "id", "description", "status", "link", "timestamp"}
+    assert set(result) == {
+        "title",
+        "id",
+        "description",
+        "status",
+        "link",
+        "timestamp",
+        "expires_at",
+    }
 
 
 async def test_list_can_be_searched(

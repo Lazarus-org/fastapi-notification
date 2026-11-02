@@ -25,6 +25,7 @@ class NotificationPreviewItem(BaseModel):
     status: str
     link: Optional[str] = None
     timestamp: datetime
+    expires_at: Optional[datetime]
     is_seen: bool
 
 
