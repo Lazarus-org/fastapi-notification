@@ -497,6 +497,8 @@ class NotificationQuerySet:
                 Notification.link,
                 Notification.timestamp,
                 Notification.expires_at,
+                Notification.template_key,
+                Notification.locale,
                 self.seen_condition(user).label("is_seen"),
             )
             .order_by(None)
@@ -580,6 +582,8 @@ async def create_notification(
     expires_at: Optional[datetime] = None,
     category: str = "general",
     priority: str = "normal",
+    template_key: Optional[str] = None,
+    locale: Optional[str] = None,
 ) -> Notification:
     """Create a notification, resolving its generic relations.
 
@@ -601,6 +605,8 @@ async def create_notification(
         expires_at (Optional[datetime]): Optional timezone-aware expiration instant.
         category (str): Built-in or application-defined category key.
         priority (str): One of ``low``, ``normal``, ``high`` or ``urgent``.
+        template_key (Optional[str]): Source event template key, if rendered.
+        locale (Optional[str]): Locale selected by template fallback.
 
     Returns:
         Notification: The created notification.
@@ -637,6 +643,8 @@ async def create_notification(
         expires_at=expires_at,
         category=category,
         priority=priority,
+        template_key=template_key,
+        locale=locale,
         actor_content_type_id=actor_content_type.id,
         actor_object_id=normalize_object_id(actor.id),
         target_content_type_id=(

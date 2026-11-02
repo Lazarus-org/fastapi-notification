@@ -32,6 +32,8 @@ class NotificationSerializer(BaseSerializer):
         data (Optional[Dict[str, Any]]): Additional data.
         timestamp (Optional[datetime]): Time when it was created.
         expires_at (Optional[datetime]): Optional notification expiration.
+        template_key (Optional[str]): Event template key used for rendering.
+        locale (Optional[str]): Resolved locale used for the text snapshot.
 
     """
 
@@ -53,6 +55,8 @@ class NotificationSerializer(BaseSerializer):
     data: Optional[Dict[str, Any]] = None
     timestamp: Optional[datetime] = None
     expires_at: Optional[datetime] = None
+    template_key: Optional[str] = None
+    locale: Optional[str] = None
 
     @classmethod
     def to_representation(cls, instance: Any) -> Dict[str, Any]:
@@ -95,6 +99,8 @@ class NotificationSerializer(BaseSerializer):
             "data": instance.data,
             "timestamp": instance.timestamp,
             "expires_at": instance.expires_at,
+            "template_key": instance.template_key,
+            "locale": instance.locale,
         }
 
         return super().to_representation(payload)

@@ -45,6 +45,8 @@ class NotificationPreviewItem(BaseModel):
     timestamp: datetime
     expires_at: Optional[datetime]
     is_seen: bool
+    template_key: Optional[str] = None
+    locale: Optional[str] = None
 
 
 class NotificationPreviewResponse(BaseModel):

@@ -1,0 +1,1 @@
+"""Localized notification template tests."""

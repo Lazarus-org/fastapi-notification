@@ -104,6 +104,7 @@ The documentation is organized into the following sections:
    usage
    taxonomy
    preferences
+   localized_templates
    concurrency
    settings
    identity

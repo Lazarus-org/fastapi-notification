@@ -533,8 +533,8 @@ class NotificationDataAccessLayer:
 
     async def create_notification(
         self,
-        verb: str,
-        actor: Actor,
+        verb: Optional[str] = None,
+        actor: Actor = None,
         description: Optional[Description] = None,
         recipients: Optional[Recipients] = None,
         groups: Optional[Groups] = None,
@@ -549,9 +549,13 @@ class NotificationDataAccessLayer:
         deduplication_key: Optional[str] = None,
         deduplication_scope: str = "global",
         deduplication_key_expires_at: Optional[datetime] = None,
-        category: str = "general",
+        category: Optional[str] = None,
         priority: str = "normal",
         group_audience_strategy: str = "dynamic",
+        template_key: Optional[str] = None,
+        locale: str = "en",
+        template_context: Optional[Dict[str, Any]] = None,
+        default_locale: str = "en",
     ) -> Notification:
         """Create a notification, optionally deduplicating a business event.
 
@@ -562,7 +566,8 @@ class NotificationDataAccessLayer:
         previous notification remains unchanged.
 
         Args:
-            verb (str): A short phrase describing the action.
+            verb (Optional[str]): A short phrase describing the action when no
+                template is used. May be omitted when ``template_key`` is supplied.
             actor (Actor): The user or entity performing the action.
             description (Optional[Description]): Additional context.
             recipients (Optional[Recipients]): Users who will receive it.
@@ -580,10 +585,17 @@ class NotificationDataAccessLayer:
                 ``"global"``. Use a tenant, user or event namespace when needed.
             deduplication_key_expires_at (Optional[datetime]): When the key may
                 be reused. ``None`` retains it until its notification is deleted.
-            category (str): Built-in or application-defined category key.
+            category (Optional[str]): Explicit category override. If omitted with
+                a template, the template's category is used; otherwise ``general``.
             priority (str): One of ``low``, ``normal``, ``high`` or ``urgent``.
             group_audience_strategy (str): ``dynamic`` (default) resolves current
                 membership at read time; ``snapshot`` captures members at creation.
+            template_key (Optional[str]): Optional localized event template key.
+            locale (str): Requested BCP-47 locale; defaults to ``en``.
+            template_context (Optional[Dict[str, Any]]): Values for simple
+                ``{variable}`` placeholders in the template.
+            default_locale (str): Fallback locale after exact and base-language
+                lookup; defaults to ``en``.
 
         Returns:
             Notification: The newly created notification, or the original
@@ -594,6 +606,32 @@ class NotificationDataAccessLayer:
             ValueError: If a key/scope is empty or too long, or the expiry is
                 naive or not in the future, or if category/priority is invalid.
         """
+        if actor is None:
+            raise ValueError("actor is required to create a notification.")
+
+        resolved_template_key = None
+        resolved_locale = None
+        if template_key is not None:
+            from fastapi_notification.repository.manager.templates import (
+                NotificationTemplateDataAccessLayer,
+            )
+
+            rendered = await NotificationTemplateDataAccessLayer(self.session).render(
+                template_key,
+                locale=locale,
+                context=template_context,
+                default_locale=default_locale,
+            )
+            verb = rendered.verb
+            description = rendered.description
+            category = category if category is not None else rendered.category
+            resolved_template_key = rendered.key
+            resolved_locale = rendered.locale
+        elif verb is None:
+            raise ValueError("verb is required when template_key is not provided.")
+
+        if category is None:
+            category = "general"
         category = normalize_category(category)
         priority = normalize_priority(priority)
         if group_audience_strategy not in {"dynamic", "snapshot"}:
@@ -677,6 +715,8 @@ class NotificationDataAccessLayer:
                 expires_at=expires_at,
                 category=category,
                 priority=priority,
+                template_key=resolved_template_key,
+                locale=resolved_locale,
             )
             if recipients:
                 await queryset.add_recipients(self.session, notification, recipients)
@@ -702,6 +742,8 @@ class NotificationDataAccessLayer:
                 expires_at=expires_at,
                 category=category,
                 priority=priority,
+                template_key=resolved_template_key,
+                locale=resolved_locale,
             )
             selected, claimed = await claim_deduplication_key(
                 self.session,

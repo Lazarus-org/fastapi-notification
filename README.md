@@ -612,3 +612,47 @@ inserts for single and bulk operations; other SQLAlchemy dialects use savepoint
 fallbacks. The package flushes but never commits the host application's
 session. The host application owns transaction commit and rollback. See the
 [concurrency guide](docs/concurrency.rst) for details.
+
+
+## Localized notification templates
+
+Register one template per event key and locale, then use the template key when
+creating a notification. Existing notifications retain the rendered text even
+if a template is subsequently edited.
+
+```python
+from fastapi_notification import (
+    NotificationDataAccessLayer,
+    NotificationTemplateDataAccessLayer,
+)
+
+templates = NotificationTemplateDataAccessLayer(session)
+await templates.register(
+    key="orders.payment_received",
+    locale="en",
+    verb_template="payment received",
+    description_template="Order {order_number} has been paid.",
+    category="orders",
+)
+await templates.register(
+    key="orders.payment_received",
+    locale="fa",
+    verb_template="پرداخت دریافت شد",
+    description_template="پرداخت سفارش {order_number} با موفقیت انجام شد.",
+    category="orders",
+)
+
+dal = NotificationDataAccessLayer(session)
+notification = await dal.create_notification(
+    actor=payment,
+    recipients=[customer],
+    template_key="orders.payment_received",
+    locale="fa-IR",  # Falls back to fa when fa-IR is not registered.
+    template_context={"order_number": "ORD-1024"},
+    is_sent=True,
+)
+await session.commit()
+```
+
+Template registration and notification creation flush their writes but never
+commit the caller's transaction. See the [localized templates guide](docs/localized_templates.rst).

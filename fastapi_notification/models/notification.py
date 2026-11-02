@@ -225,6 +225,14 @@ class Notification(Base):
             "longer visible or actionable for recipients."
         ),
     )
+    template_key: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True, index=True,
+        comment="Event template key used to render this notification, if any.",
+    )
+    locale: Mapped[Optional[str]] = mapped_column(
+        String(35), nullable=True,
+        comment="Resolved locale used for the stored notification text snapshot.",
+    )
 
     # These collections are transient identity projections populated by the
     # configured adapter. They deliberately are not ORM relationships: the

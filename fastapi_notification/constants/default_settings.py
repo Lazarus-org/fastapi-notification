@@ -14,6 +14,8 @@ class DefaultSerializerSettings:
             "link",
             "timestamp",
             "expires_at",
+            "template_key",
+            "locale",
         ]
     )
     notification_serializer_class: Optional[str] = None
