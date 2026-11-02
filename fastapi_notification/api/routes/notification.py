@@ -17,10 +17,17 @@ from fastapi_notification.api.schemas.notification_preference import (
     NotificationPreferenceList,
     NotificationPreferenceUpdate,
 )
+from fastapi_notification.api.schemas.notification_scheduling import (
+    DigestScheduleItem, DigestScheduleList, DigestScheduleUpdate,
+    QuietHoursItem, QuietHoursList, QuietHoursUpdate,
+)
 from fastapi_notification.api.schemas.notification_summary import (
     NotificationPreviewItem,
     NotificationPreviewResponse,
     NotificationSummaryResponse,
+)
+from fastapi_notification.repository.manager.scheduling import (
+    NotificationSchedulingDataAccessLayer,
 )
 from fastapi_notification.repository.manager.preferences import (
     NotificationPreferenceDataAccessLayer,
@@ -199,6 +206,108 @@ def create_notification_router(
         """Remove a rule and restore inherited/default delivery behavior."""
         await NotificationPreferenceDataAccessLayer(session).reset_preference(
             user, category=category, channel=channel
+        )
+        await session.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.get(
+        "/quiet-hours/", response_model=QuietHoursList,
+        summary="List the current user's quiet-hour rules",
+    )
+    async def list_notification_quiet_hours(
+        session: AsyncSession = Depends(session_dep),
+        user: Any = Depends(user_dep),
+    ) -> Dict[str, Any]:
+        rows = await NotificationSchedulingDataAccessLayer(
+            session
+        ).list_quiet_hours(user)
+        return QuietHoursList(
+            results=[QuietHoursItem.model_validate(row) for row in rows]
+        ).model_dump()
+
+    @router.put(
+        "/quiet-hours/", response_model=QuietHoursItem,
+        summary="Create or update a quiet-hour rule",
+    )
+    async def set_notification_quiet_hours(
+        payload: QuietHoursUpdate,
+        session: AsyncSession = Depends(session_dep),
+        user: Any = Depends(user_dep),
+    ) -> Dict[str, Any]:
+        row = await NotificationSchedulingDataAccessLayer(session).set_quiet_hours(
+            user, channel=payload.channel, start_time=payload.start_time,
+            end_time=payload.end_time, timezone_name=payload.timezone,
+            enabled=payload.enabled, allow_urgent=payload.allow_urgent,
+        )
+        response_payload = QuietHoursItem.model_validate(row).model_dump()
+        await session.commit()
+        return response_payload
+
+    @router.delete(
+        "/quiet-hours/", status_code=status.HTTP_204_NO_CONTENT,
+        summary="Remove a quiet-hour rule",
+    )
+    async def reset_notification_quiet_hours(
+        channel: str = Query(
+            "*", max_length=64,
+            pattern=r"^(\*|[A-Za-z0-9][A-Za-z0-9._-]{0,63})$",
+        ),
+        session: AsyncSession = Depends(session_dep),
+        user: Any = Depends(user_dep),
+    ) -> Response:
+        await NotificationSchedulingDataAccessLayer(session).reset_quiet_hours(
+            user, channel=channel
+        )
+        await session.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.get(
+        "/digest-schedules/", response_model=DigestScheduleList,
+        summary="List the current user's digest schedules",
+    )
+    async def list_notification_digest_schedules(
+        session: AsyncSession = Depends(session_dep),
+        user: Any = Depends(user_dep),
+    ) -> Dict[str, Any]:
+        rows = await NotificationSchedulingDataAccessLayer(
+            session
+        ).list_digest_schedules(user)
+        return DigestScheduleList(
+            results=[DigestScheduleItem.model_validate(row) for row in rows]
+        ).model_dump()
+
+    @router.put(
+        "/digest-schedules/", response_model=DigestScheduleItem,
+        summary="Create or update a digest schedule",
+    )
+    async def set_notification_digest_schedule(
+        payload: DigestScheduleUpdate,
+        session: AsyncSession = Depends(session_dep),
+        user: Any = Depends(user_dep),
+    ) -> Dict[str, Any]:
+        row = await NotificationSchedulingDataAccessLayer(session).set_digest_schedule(
+            user, channel=payload.channel, frequency=payload.frequency,
+            local_time=payload.local_time, timezone_name=payload.timezone,
+            weekday=payload.weekday, enabled=payload.enabled,
+        )
+        response_payload = DigestScheduleItem.model_validate(row).model_dump()
+        await session.commit()
+        return response_payload
+
+    @router.delete(
+        "/digest-schedules/", status_code=status.HTTP_204_NO_CONTENT,
+        summary="Remove a digest schedule",
+    )
+    async def reset_notification_digest_schedule(
+        channel: str = Query(
+            "email", max_length=64,
+            pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+        ),
+        session: AsyncSession = Depends(session_dep),
+        user: Any = Depends(user_dep),
+    ) -> Response:
+        await NotificationSchedulingDataAccessLayer(session).reset_digest_schedule(
+            user, channel=channel
         )
         await session.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)

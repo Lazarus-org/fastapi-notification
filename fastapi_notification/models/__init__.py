@@ -12,6 +12,8 @@ from .helper.enums import NotificationCategory, NotificationPriority, Notificati
 from .notification import Notification, notification_group
 from .notification_recipient import NotificationRecipient
 from .notification_preference import NotificationPreference
+from .notification_quiet_hours import NotificationQuietHours
+from .notification_digest import NotificationDigestBatch, NotificationDigestSchedule
 from .notification_template import NotificationTemplate
 from .notification_seen import NotificationSeen
 from .permissions.notification_permission import NotificationPermission
@@ -29,6 +31,9 @@ __all__ = [
     "NotificationPriority",
     "NotificationRecipient",
     "NotificationPreference",
+    "NotificationQuietHours",
+    "NotificationDigestSchedule",
+    "NotificationDigestBatch",
     "NotificationTemplate",
     "NotificationSeen",
     "NotificationStatus",

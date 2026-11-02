@@ -656,3 +656,13 @@ await session.commit()
 
 Template registration and notification creation flush their writes but never
 commit the caller's transaction. See the [localized templates guide](docs/localized_templates.rst).
+
+
+Quiet Hours and Digests
+-----------------------
+
+The package provides timezone-aware quiet-hour rules and daily/weekly digest
+scheduling primitives. It does not bundle a background worker or delivery
+provider; integrate ``NotificationSchedulingDataAccessLayer`` with your own
+cron, Celery, APScheduler, or application worker. See the
+`Scheduling documentation <https://fastapi-notification.readthedocs.io/en/latest/scheduling.html>`_.

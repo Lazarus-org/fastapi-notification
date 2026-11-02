@@ -104,6 +104,7 @@ The documentation is organized into the following sections:
    usage
    taxonomy
    preferences
+   scheduling
    localized_templates
    concurrency
    settings

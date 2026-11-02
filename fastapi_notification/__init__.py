@@ -24,6 +24,9 @@ from fastapi_notification.models import (
     NotificationDeduplication,
     NotificationPriority,
     NotificationPreference,
+    NotificationQuietHours,
+    NotificationDigestSchedule,
+    NotificationDigestBatch,
     NotificationTemplate,
     NotificationRecipient,
     NotificationSeen,
@@ -34,6 +37,9 @@ from fastapi_notification.models import (
 )
 from fastapi_notification.repository.manager.notification import (
     NotificationDataAccessLayer,
+)
+from fastapi_notification.repository.manager.scheduling import (
+    NotificationSchedulingDataAccessLayer,
 )
 from fastapi_notification.repository.manager.preferences import (
     NotificationPreferenceDataAccessLayer,
@@ -60,6 +66,10 @@ __all__ = [
     "NotificationDeduplication",
     "NotificationPriority",
     "NotificationPreference",
+    "NotificationQuietHours",
+    "NotificationDigestSchedule",
+    "NotificationDigestBatch",
+    "NotificationSchedulingDataAccessLayer",
     "NotificationTemplate",
     "NotificationTemplateDataAccessLayer",
     "RenderedNotificationTemplate",

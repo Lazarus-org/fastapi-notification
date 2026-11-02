@@ -7,6 +7,14 @@ from .notification_preference import (
     NotificationPreferenceList,
     NotificationPreferenceUpdate,
 )
+from .notification_scheduling import (
+    DigestScheduleItem,
+    DigestScheduleList,
+    DigestScheduleUpdate,
+    QuietHoursItem,
+    QuietHoursList,
+    QuietHoursUpdate,
+)
 from .notification_summary import (
     NotificationCountBreakdown,
     NotificationPreviewItem,
@@ -14,6 +22,7 @@ from .notification_summary import (
     NotificationSummaryResponse,
 )
 from .user import UserSerializer, build_user_serializer
+
 
 __all__ = [
     "BaseSerializer",
@@ -26,6 +35,12 @@ __all__ = [
     "NotificationPreferenceItem",
     "NotificationPreferenceList",
     "NotificationPreferenceUpdate",
+    "QuietHoursUpdate",
+    "QuietHoursItem",
+    "QuietHoursList",
+    "DigestScheduleUpdate",
+    "DigestScheduleItem",
+    "DigestScheduleList",
     "NotificationSummaryResponse",
     "PermissionSerializer",
     "UserSerializer",
