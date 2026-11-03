@@ -509,9 +509,7 @@ class NotificationDataAccessLayer:
             List[Dict[str, Any]]: Preview rows including the ``is_seen`` flag.
 
         """
-        preview_statement = self.query_set.preview_statement(
-            statement, user, limit
-        )
+        preview_statement = self.query_set.preview_statement(statement, user, limit)
         result = await self.session.execute(preview_statement)
         return [dict(row) for row in result.mappings().all()]
 
@@ -639,7 +637,9 @@ class NotificationDataAccessLayer:
 
         if group_audience_strategy == "snapshot" and groups:
             adapter = get_identity_adapter()
-            group_items = list(groups) if isinstance(groups, (list, tuple, set)) else [groups]
+            group_items = (
+                list(groups) if isinstance(groups, (list, tuple, set)) else [groups]
+            )
             snapshot_members = []
             for group in group_items:
                 snapshot_members.extend(
@@ -651,7 +651,12 @@ class NotificationDataAccessLayer:
                 if isinstance(recipients, (list, tuple, set))
                 else ([recipients] if recipients is not None else [])
             )
-            recipients = existing_recipients + snapshot_members
+            recipients = list(
+                {
+                    adapter.get_user_id(member): member
+                    for member in existing_recipients + snapshot_members
+                }.values()
+            )
             groups = None
 
         if deduplication_key is not None:
@@ -687,17 +692,15 @@ class NotificationDataAccessLayer:
                     raise ValueError(
                         "deduplication_key_expires_at must be timezone-aware."
                     )
-                deduplication_key_expires_at = (
-                    deduplication_key_expires_at.astimezone(timezone.utc)
+                deduplication_key_expires_at = deduplication_key_expires_at.astimezone(
+                    timezone.utc
                 )
                 if deduplication_key_expires_at <= datetime.now(timezone.utc):
                     raise ValueError(
                         "deduplication_key_expires_at must be in the future."
                     )
         elif deduplication_key_expires_at is not None:
-            raise ValueError(
-                "deduplication_key_expires_at requires deduplication_key."
-            )
+            raise ValueError("deduplication_key_expires_at requires deduplication_key.")
 
         if deduplication_key is None:
             notification = await queryset.create_notification(

@@ -28,17 +28,11 @@ from fastapi_notification.constants.qs_types import (
     Rows,
     Target,
 )
-from fastapi_notification.identity import (
-    get_identity_adapter,
-    require_staff_identity,
-)
+from fastapi_notification.identity import get_identity_adapter, require_staff_identity
 from fastapi_notification.models.base import utcnow
-from fastapi_notification.models.content_type import (
-    ContentType,
-    normalize_object_id,
-)
-from fastapi_notification.models.deleted_notification import DeletedNotification
+from fastapi_notification.models.content_type import ContentType, normalize_object_id
 from fastapi_notification.models.deduplication import NotificationDeduplication
+from fastapi_notification.models.deleted_notification import DeletedNotification
 from fastapi_notification.models.notification import Notification, notification_group
 from fastapi_notification.models.notification_recipient import NotificationRecipient
 from fastapi_notification.models.notification_seen import NotificationSeen
@@ -469,9 +463,7 @@ class NotificationQuerySet:
             .group_by(visible_ids.c.category, visible_ids.c.priority, is_seen)
         )
 
-    def preview_statement(
-        self, statement: Select, user: Any, limit: int
-    ) -> Select:
+    def preview_statement(self, statement: Select, user: Any, limit: int) -> Select:
         """Build a bounded recent-notification query with per-user read state.
 
         The supplied statement must already be scoped to the user's visible
@@ -657,9 +649,7 @@ async def create_notification(
             action_object_content_type.id if action_object_content_type else None
         ),
         action_object_object_id=(
-            normalize_object_id(action_object.id)
-            if action_object is not None
-            else None
+            normalize_object_id(action_object.id) if action_object is not None else None
         ),
     )
 
@@ -739,6 +729,26 @@ async def update_notification(
     return notification
 
 
+async def _delete_notification_associations(
+    session: AsyncSession, notification_ids: Sequence[int]
+) -> None:
+    """Remove dependent rows even when database foreign keys are disabled."""
+    for model in (
+        NotificationDeduplication,
+        NotificationSeen,
+        DeletedNotification,
+        NotificationRecipient,
+    ):
+        await session.execute(
+            delete(model).where(model.notification_id.in_(notification_ids))
+        )
+    await session.execute(
+        delete(notification_group).where(
+            notification_group.c.notification_id.in_(notification_ids)
+        )
+    )
+
+
 async def delete_notification(
     session: AsyncSession,
     notification_id: int,
@@ -781,9 +791,7 @@ async def delete_notification(
             display_detail=True,
         )
 
-    result = await session.execute(
-        statement.where(Notification.id == notification_id)
-    )
+    result = await session.execute(statement.where(Notification.id == notification_id))
     instance = result.scalars().unique().one_or_none()
 
     if instance is None:
@@ -793,11 +801,7 @@ async def delete_notification(
         await DeletedNotification.create(session, instance, recipient)
         return
 
-    await session.execute(
-        delete(NotificationDeduplication).where(
-            NotificationDeduplication.notification_id == notification_id
-        )
-    )
+    await _delete_notification_associations(session, [notification_id])
     await session.delete(instance)
     await session.flush()
 
@@ -926,14 +930,8 @@ async def delete_many(
     if not identifiers:
         return 0
 
-    await session.execute(
-        delete(NotificationDeduplication).where(
-            NotificationDeduplication.notification_id.in_(identifiers)
-        )
-    )
-    await session.execute(
-        delete(Notification).where(Notification.id.in_(identifiers))
-    )
+    await _delete_notification_associations(session, identifiers)
+    await session.execute(delete(Notification).where(Notification.id.in_(identifiers)))
     await session.flush()
 
     return len(identifiers)
@@ -983,31 +981,7 @@ async def purge_expired(
     if not notification_ids:
         return 0
 
-    await session.execute(
-        delete(NotificationDeduplication).where(
-            NotificationDeduplication.notification_id.in_(notification_ids)
-        )
-    )
-    await session.execute(
-        delete(NotificationSeen).where(
-            NotificationSeen.notification_id.in_(notification_ids)
-        )
-    )
-    await session.execute(
-        delete(DeletedNotification).where(
-            DeletedNotification.notification_id.in_(notification_ids)
-        )
-    )
-    await session.execute(
-        delete(NotificationRecipient).where(
-            NotificationRecipient.notification_id.in_(notification_ids)
-        )
-    )
-    await session.execute(
-        delete(notification_group).where(
-            notification_group.c.notification_id.in_(notification_ids)
-        )
-    )
+    await _delete_notification_associations(session, notification_ids)
     delete_result = await session.execute(
         delete(Notification).where(Notification.id.in_(notification_ids))
     )
@@ -1087,9 +1061,7 @@ async def get_notification(
         visible through the statement.
 
     """
-    result = await session.execute(
-        statement.where(Notification.id == notification_id)
-    )
+    result = await session.execute(statement.where(Notification.id == notification_id))
     return result.scalars().unique().one_or_none()
 
 

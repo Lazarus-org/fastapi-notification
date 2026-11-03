@@ -61,44 +61,28 @@ def test_ids_passes_raw_integers_through() -> None:
 
 @pytest.mark.parametrize("operation", ["mark_all_as_seen", "clear_all"])
 async def test_bulk_user_operations_include_identity_adapter_groups(
-    monkeypatch: pytest.MonkeyPatch, operation: str
+    monkeypatch: pytest.MonkeyPatch, operation: str, session: AsyncSession
 ) -> None:
-    """Bulk state changes pass host group memberships into their queries."""
+    """Bulk state changes execute SQL using host group memberships."""
+    from fastapi_notification.identity import IdentityAdapter
+
     captured = {}
 
-    class FakeAdapter:
+    class Adapter(IdentityAdapter):
         async def get_user_group_ids(self, session: Any, user: Any) -> List[str]:
             return ["group-17"]
 
-    class FakeQuerySet:
-        def unseen(self, **kwargs: Any) -> object:
+    class CapturingQuerySet(NotificationQuerySet):
+        def unseen(self, **kwargs: Any):
             captured.update(kwargs)
-            return object()
+            return super().unseen(**kwargs)
 
-        def seen(self, **kwargs: Any) -> object:
+        def seen(self, **kwargs: Any):
             captured.update(kwargs)
-            return object()
+            return super().seen(**kwargs)
 
-    class FakeSession:
-        def add_all(self, instances: List[Any]) -> None:
-            assert instances == []
-
-        async def flush(self) -> None:
-            return None
-
-    async def fake_fetch(
-        session: Any, statement: Any, display_detail: bool = False
-    ) -> List[Any]:
-        assert display_detail is True
-        return []
-
-    monkeypatch.setattr(
-        queryset_module, "get_identity_adapter", lambda: FakeAdapter()
-    )
-    monkeypatch.setattr(queryset_module, "NotificationQuerySet", FakeQuerySet)
-    monkeypatch.setattr(queryset_module, "fetch", fake_fetch)
-
-    session = FakeSession()
+    monkeypatch.setattr(queryset_module, "get_identity_adapter", lambda: Adapter())
+    monkeypatch.setattr(queryset_module, "NotificationQuerySet", CapturingQuerySet)
     user = SimpleNamespace(id="user-12")
     if operation == "mark_all_as_seen":
         assert await queryset_module.mark_all_as_seen(session, user) == 0
@@ -106,7 +90,6 @@ async def test_bulk_user_operations_include_identity_adapter_groups(
     else:
         await queryset_module.clear_all(session, user)
         assert captured["seen_by"] is user
-
     assert captured["groups"] == ["group-17"]
     assert captured["display_detail"] is True
 
@@ -133,9 +116,7 @@ def test_elevated_roles_are_still_recipient_scoped(
     viewer = SimpleNamespace(
         id=identifier, is_staff=is_staff, is_superuser=is_superuser
     )
-    statement = NotificationQuerySet().unseen(
-        unseen_by=viewer, display_detail=True
-    )
+    statement = NotificationQuerySet().unseen(unseen_by=viewer, display_detail=True)
     sql = str(
         statement.compile(
             dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}

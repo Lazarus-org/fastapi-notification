@@ -102,6 +102,8 @@ async def test_summary_rows_carry_only_the_default_fields(
         "link",
         "timestamp",
         "expires_at",
+        "template_key",
+        "locale",
     }
 
 
@@ -185,9 +187,7 @@ async def test_mark_all_as_seen_includes_group_notifications(
     assert await dal.mark_all_as_seen(group_user) == 1
     await session.commit()
 
-    assert len(
-        await dal.unseen(group_user, groups=[group], display_detail=True)
-    ) == 0
+    assert len(await dal.unseen(group_user, groups=[group], display_detail=True)) == 0
     assert len(await dal.seen(group_user, groups=[group], display_detail=True)) == 1
 
 
@@ -318,9 +318,7 @@ async def test_clear_all_includes_group_notifications(
     await dal.clear_all(group_user)
     await session.commit()
 
-    assert len(
-        await dal.seen(group_user, groups=[group], display_detail=True)
-    ) == 0
+    assert len(await dal.seen(group_user, groups=[group], display_detail=True)) == 0
     assert len(await dal.deleted(group_user)) == 1
     assert await session.get(Notification, notification.id) is not None
 
@@ -372,9 +370,7 @@ async def test_hard_delete_removes_the_row(
     session: AsyncSession,
 ) -> None:
     """A staff actor can hard-delete a notification."""
-    await dal.delete_notification(
-        notification.id, soft_delete=False, actor=staff_user
-    )
+    await dal.delete_notification(notification.id, soft_delete=False, actor=staff_user)
     await session.commit()
 
     assert await session.get(Notification, notification.id) is None
@@ -395,8 +391,9 @@ async def test_staff_cannot_delete_another_users_notification_with_recipient_sco
             actor=staff_user,
         )
 
+    notification_id = notification.id
     await session.rollback()
-    assert await session.get(Notification, notification.id) is not None
+    assert await session.get(Notification, notification_id) is not None
 
 
 async def test_group_member_can_soft_delete_group_notification(
@@ -530,8 +527,6 @@ async def test_delete_many_on_no_matches_is_a_no_op(
     assert await dal.delete_many(statement, actor=staff_user) == 0
 
 
-
-
 async def test_hard_delete_requires_a_staff_actor(
     dal: NotificationDataAccessLayer,
     notification: Notification,
@@ -541,8 +536,9 @@ async def test_hard_delete_requires_a_staff_actor(
     with pytest.raises(PermissionError, match="Staff permission is required"):
         await dal.delete_notification(notification.id, soft_delete=False)
 
+    notification_id = notification.id
     await session.rollback()
-    assert await session.get(Notification, notification.id) is not None
+    assert await session.get(Notification, notification_id) is not None
 
 
 async def test_hard_delete_rejects_regular_user_actor(
@@ -553,12 +549,11 @@ async def test_hard_delete_rejects_regular_user_actor(
 ) -> None:
     """An ordinary identity cannot hard-delete through the DAL."""
     with pytest.raises(PermissionError, match="Staff permission is required"):
-        await dal.delete_notification(
-            notification.id, soft_delete=False, actor=user
-        )
+        await dal.delete_notification(notification.id, soft_delete=False, actor=user)
 
+    notification_id = notification.id
     await session.rollback()
-    assert await session.get(Notification, notification.id) is not None
+    assert await session.get(Notification, notification_id) is not None
 
 
 async def test_hard_delete_rejects_superuser_without_staff(
@@ -573,8 +568,9 @@ async def test_hard_delete_rejects_superuser_without_staff(
             notification.id, soft_delete=False, actor=superuser_only
         )
 
+    notification_id = notification.id
     await session.rollback()
-    assert await session.get(Notification, notification.id) is not None
+    assert await session.get(Notification, notification_id) is not None
 
 
 async def test_delete_many_requires_staff_actor(
@@ -593,9 +589,19 @@ async def test_the_query_set_is_exposed(dal: NotificationDataAccessLayer) -> Non
 
 
 async def test_notifications_are_ordered_newest_first(
-    dal: NotificationDataAccessLayer, notifications: List[Notification], user: User
+    dal: NotificationDataAccessLayer,
+    notifications: List[Notification],
+    user: User,
+    session: AsyncSession,
 ) -> None:
     """Listings lead with the most recent notification."""
+    from datetime import datetime, timedelta, timezone
+
+    for index, notification in enumerate(notifications):
+        notification.timestamp = datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(
+            seconds=index
+        )
+    await session.commit()
     rows = await dal.sent(recipients=user, display_detail=True)
 
     assert [item.id for item in rows] == sorted(
@@ -611,9 +617,7 @@ async def test_deleted_notifications_are_excluded_from_listings(
 ) -> None:
     """A cleared notification stops appearing for the user who cleared it."""
     session.add(
-        DeletedNotification(
-            notification_id=notification.id, user_id=str(user.id)
-        )
+        DeletedNotification(notification_id=notification.id, user_id=str(user.id))
     )
     await session.commit()
 
