@@ -1,3 +1,0 @@
-# Optional test drivers used by this validation environment.
-asyncpg==0.32.0
-aiomysql==0.3.2
