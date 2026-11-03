@@ -20,8 +20,7 @@ class NotificationCategory(str, Enum):
     def choices(cls) -> List[Tuple[str, str]]:
         """Return built-in category keys and display labels."""
         return [
-            (member.value, member.value.replace("_", " ").title())
-            for member in cls
+            (member.value, member.value.replace("_", " ").title()) for member in cls
         ]
 
     @classmethod
@@ -55,8 +54,8 @@ _CATEGORY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 def normalize_category(value: Any) -> str:
     """Normalize and validate a built-in or application-defined category key.
 
-    Category keys are case-insensitive on input and persisted in lowercase.
-    Namespaced custom keys such as ``com.example.billing`` are supported.
+    Category keys are case-insensitive on input and persisted in lowercase. Namespaced
+    custom keys such as ``com.example.billing`` are supported.
     """
     if isinstance(value, Enum):
         value = value.value
@@ -80,8 +79,6 @@ def normalize_priority(value: Any) -> str:
     normalized = value.strip().lower()
     if normalized not in NotificationPriority.values():
         raise ValueError(
-            "priority must be one of: "
-            + ", ".join(NotificationPriority.values())
-            + "."
+            "priority must be one of: " + ", ".join(NotificationPriority.values()) + "."
         )
     return normalized

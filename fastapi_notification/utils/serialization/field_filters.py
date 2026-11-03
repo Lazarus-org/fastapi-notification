@@ -11,7 +11,6 @@ def filter_non_empty_fields(data: Dict, exclude_fields: Optional[List] = None) -
 
     Returns:
         dict: A dictionary containing only non-empty and non-excluded fields.
-
     """
     exclude_fields = exclude_fields or []
     return {

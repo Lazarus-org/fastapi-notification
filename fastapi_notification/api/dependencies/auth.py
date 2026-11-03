@@ -19,7 +19,6 @@ async def get_current_user() -> Any:
 
     Raises:
         NotImplementedError: Always, until the host supplies a dependency.
-
     """
     raise NotImplementedError(
         "fastapi-notification needs to know who is making the request. Pass"
@@ -42,7 +41,6 @@ async def get_authenticated_user(
 
     Raises:
         HTTPException: With status 401 when there is no authenticated user.
-
     """
     if user is None:
         raise HTTPException(
@@ -64,7 +62,6 @@ async def require_admin_user(user: Any = Depends(get_authenticated_user)) -> Any
 
     Raises:
         HTTPException: With status 403 when the user is not staff.
-
     """
     if not is_staff_identity(user):
         raise HTTPException(
@@ -90,7 +87,6 @@ def make_authenticated_dependency(
 
     Returns:
         Callable[..., Any]: The guarded dependency.
-
     """
 
     async def authenticated(user: Any = Depends(user_dependency)) -> Any:
@@ -104,7 +100,6 @@ def make_authenticated_dependency(
 
         Raises:
             HTTPException: With status 401 when there is no authenticated user.
-
         """
         if user is None:
             raise HTTPException(
@@ -129,7 +124,6 @@ async def apply_extra_permission(request: Request, user: Any) -> None:
 
     Raises:
         HTTPException: With status 403 when the extra permission denies access.
-
     """
     permission_class = config.api_extra_permission_class
 
@@ -159,7 +153,6 @@ def make_extra_permission_dependency(
 
     Returns:
         Callable[..., Any]: The extra permission dependency.
-
     """
 
     async def check_extra_permission(
@@ -173,7 +166,6 @@ def make_extra_permission_dependency(
 
         Returns:
             Any: The authenticated user.
-
         """
         await apply_extra_permission(request, user)
         return user
@@ -192,7 +184,6 @@ def make_admin_dependency(
 
     Returns:
         Callable[..., Any]: The admin-only dependency.
-
     """
 
     async def require_admin(user: Any = Depends(user_dependency)) -> Any:
@@ -206,7 +197,6 @@ def make_admin_dependency(
 
         Raises:
             HTTPException: With status 403 when the user is not staff.
-
         """
         if not is_staff_identity(user):
             raise HTTPException(

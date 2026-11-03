@@ -22,7 +22,6 @@ class ConfigurableAttrsMixin:
         search_fields (Optional[List[str]]): Fields the API can be searched on.
         pagination_class (Optional[Type[Any]]): The class used for pagination.
         dependencies (List[Any]): The shared dependency chain.
-
     """
 
     def configure_attrs(
@@ -35,7 +34,6 @@ class ConfigurableAttrsMixin:
                 resolving the current user. The shared dependency chain is bound
                 to it, so throttling and the extra permission see the same user
                 the routes do.
-
         """
         user_dep = user_dependency or get_authenticated_user
 
@@ -45,9 +43,7 @@ class ConfigurableAttrsMixin:
 
         pagination_class = config.api_pagination_class
         self.pagination_class: Optional[Type[Any]] = pagination_class
-        self.paginator: Optional[Any] = (
-            pagination_class() if pagination_class else None
-        )
+        self.paginator: Optional[Any] = pagination_class() if pagination_class else None
 
         self.dependencies: List[Any] = [Depends(user_dep)]
 
@@ -70,7 +66,6 @@ class ConfigurableAttrsMixin:
         Returns:
             Any: The paginated envelope, or the bare results when pagination is
             switched off.
-
         """
         if self.paginator is None:
             return results
@@ -86,7 +81,6 @@ class ConfigurableAttrsMixin:
 
         Returns:
             Any: The paged statement, unchanged when pagination is switched off.
-
         """
         if self.paginator is None:
             return statement
@@ -100,7 +94,6 @@ class ConfigurableAttrsMixin:
 
         Returns:
             Callable[..., Any]: The configured filter set, or the default.
-
         """
         from fastapi_notification.api.filters.notification_filter import (
             NotificationFilter,

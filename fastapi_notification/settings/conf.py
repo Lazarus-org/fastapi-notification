@@ -31,7 +31,6 @@ def _parse_environment_value(raw: str, default_value: Any) -> Any:
 
     Returns:
         Any: The coerced value, or the raw string when no coercion applies.
-
     """
     if isinstance(default_value, bool):
         lowered = raw.strip().lower()
@@ -64,11 +63,12 @@ def configure(**settings: Any) -> "NotificationConfig":
     Returns:
         NotificationConfig: The rebuilt configuration, which is also the active
         one.
-
     """
     for name, value in settings.items():
-        key = name if name.startswith(NotificationConfig.prefix) else (
-            f"{NotificationConfig.prefix}{name}"
+        key = (
+            name
+            if name.startswith(NotificationConfig.prefix)
+            else (f"{NotificationConfig.prefix}{name}")
         )
         _overrides[key.upper()] = value
 
@@ -81,7 +81,6 @@ def reset_config() -> "NotificationConfig":
     Returns:
         NotificationConfig: The rebuilt configuration, which is also the active
         one.
-
     """
     _overrides.clear()
     return reload_config()
@@ -115,7 +114,6 @@ class NotificationConfig:
         api_filterset_class (Optional[Type[Any]]): The class used for filtering.
         api_ordering_fields (List[str]): Fields that can be used for ordering.
         api_search_fields (List[str]): Fields that can be searched.
-
     """
 
     prefix = "FASTAPI_NOTIFICATION_"
@@ -215,7 +213,6 @@ class NotificationConfig:
 
         Returns:
             Any: The value of the setting or the default value if not found.
-
         """
         if setting_name in _overrides:
             return _overrides[setting_name]
@@ -244,7 +241,6 @@ class NotificationConfig:
         Returns:
             Optional[Union[Type[Any], List[Type[Any]]]]: The imported class or
             classes, or ``None`` if the import fails or the path is invalid.
-
         """
         class_path: Any = self.get_setting(setting_name, default_path)
 
@@ -279,7 +275,6 @@ def reload_config() -> NotificationConfig:
 
     Returns:
         NotificationConfig: The active configuration.
-
     """
     fresh = NotificationConfig()
     config.__dict__.update(fresh.__dict__)

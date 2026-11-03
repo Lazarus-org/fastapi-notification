@@ -18,7 +18,6 @@ def conditional_route(condition: bool) -> Callable:
 
     Raises:
         TypeError: If ``condition`` is not a boolean.
-
     """
     if not isinstance(condition, bool):
         raise TypeError("The 'condition' argument must be of type bool.")
@@ -44,6 +43,5 @@ def is_route_enabled(func: Callable) -> bool:
 
     Returns:
         bool: Whether the route should be registered.
-
     """
     return bool(getattr(func, "route_enabled", True))

@@ -27,7 +27,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
     return based on package settings, picking a serializer to match, and running
     a listing through filtering, counting and pagination. Authorization and
     audience visibility are independent of staff/superuser presentation roles.
-
     """
 
     def __init__(self, user_dependency: Optional[Callable[..., Any]] = None) -> None:
@@ -48,7 +47,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             Sequence[str]: The normalized identifiers of the user's groups.
-
         """
         return list(await get_identity_adapter().get_user_group_ids(session, user))
 
@@ -64,7 +62,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             bool: Whether whole notifications should be selected.
-
         """
         return bool(
             display_detail
@@ -81,7 +78,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             Type[Any]: The serializer class to use.
-
         """
         # Staff and superuser status must not reveal additional notification
         # fields. The representation is controlled only by explicit settings.
@@ -99,7 +95,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             NotificationDataAccessLayer: The data access layer.
-
         """
         return NotificationDataAccessLayer(session)
 
@@ -121,7 +116,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Raises:
             NotImplementedError: Always; each router supplies its own.
-
         """
         raise NotImplementedError
 
@@ -142,7 +136,6 @@ class BaseNotificationRoutes(ConfigurableAttrsMixin, DisableMethodsMixin):
 
         Returns:
             Dict[str, Any]: The paginated response body.
-
         """
         # The query shape is selected by explicit serializer settings, never
         # by a user's staff or superuser flag.

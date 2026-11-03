@@ -27,7 +27,6 @@ async def mark_seen(
         dal (NotificationDataAccessLayer): The data access layer.
         user (User): The user who has seen them.
         session (AsyncSession): The session used to write.
-
     """
     await dal.mark_all_as_seen(user)
     await session.commit()

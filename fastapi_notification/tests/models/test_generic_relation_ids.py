@@ -46,6 +46,7 @@ class StringReference(AuthBase):
     id: Mapped[str] = mapped_column(String(200), primary_key=True)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
 
+
 class CompositeReference(AuthBase):
     """Model used to document the generic relation single-PK limitation."""
 
@@ -230,7 +231,6 @@ async def test_generic_relations_round_trip_integer_uuid_and_string_ids(
     assert isinstance(reloaded.target.id, UUID)
     assert reloaded.action_object.id == "comment:alpha/2026"
     assert isinstance(reloaded.action_object.id, str)
-
 
 
 def test_dynamic_serializer_emits_generic_ids_as_strings() -> None:

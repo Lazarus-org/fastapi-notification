@@ -12,10 +12,10 @@ from fastapi_notification.models.base import Base, UTCDateTime, utcnow
 class NotificationDeduplication(Base):
     """Map a scoped idempotency key to the notification created for that event.
 
-    A key remains active until ``expires_at``. A NULL expiry means the key is
-    retained for as long as its notification exists. Reusing an active key
-    returns the original notification without changing its content or audience.
-    Once a key expires, a new notification may atomically claim the same key.
+    A key remains active until ``expires_at``. A NULL expiry means the key is retained
+    for as long as its notification exists. Reusing an active key returns the original
+    notification without changing its content or audience. Once a key expires, a new
+    notification may atomically claim the same key.
     """
 
     __tablename__ = "notification_deduplication"
@@ -37,9 +37,7 @@ class NotificationDeduplication(Base):
     notification_id: Mapped[int] = mapped_column(
         ForeignKey("notification.id", ondelete="CASCADE"), nullable=False
     )
-    expires_at: Mapped[Optional[datetime]] = mapped_column(
-        UTCDateTime(), nullable=True
-    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, default=utcnow
     )

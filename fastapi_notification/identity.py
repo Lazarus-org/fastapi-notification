@@ -1,8 +1,8 @@
 """Identity integration for host application user and group models.
 
-The notification schema stores user and group identifiers as opaque strings.
-This module is the only boundary between those identifiers and the host
-application's authentication and authorization models.
+The notification schema stores user and group identifiers as opaque strings. This module
+is the only boundary between those identifiers and the host application's authentication
+and authorization models.
 """
 
 from __future__ import annotations
@@ -63,14 +63,14 @@ def normalize_identity_id(value: Any) -> str:
 class IdentityAdapter:
     """Base adapter for integrating host application identities.
 
-    Subclass this adapter when user IDs, group IDs, membership, or identity
-    resolution differ from the conventional ``id`` and ``groups`` attributes.
-    The base implementation does not query or require package-owned auth tables.
+    Subclass this adapter when user IDs, group IDs, membership, or identity resolution
+    differ from the conventional ``id`` and ``groups`` attributes. The base
+    implementation does not query or require package-owned auth tables.
 
-    ``resolve_users`` and ``resolve_groups`` return mappings keyed by the
-    normalized identifier. Their default implementations return lightweight
-    :class:`IdentityReference` objects, so API serialization does not require
-    access to a user or group table.
+    ``resolve_users`` and ``resolve_groups`` return mappings keyed by the normalized
+    identifier. Their default implementations return lightweight
+    :class:`IdentityReference` objects, so API serialization does not require access to
+    a user or group table.
     """
 
     user_id_attribute = "id"
@@ -100,9 +100,9 @@ class IdentityAdapter:
     ) -> Sequence[Any]:
         """Return current users belonging to a group for snapshot delivery.
 
-        Applications using snapshot group audiences must override this method
-        and return the member identities at creation time. The default adapter
-        deliberately refuses to guess how a host application stores membership.
+        Applications using snapshot group audiences must override this method and return
+        the member identities at creation time. The default adapter deliberately refuses
+        to guess how a host application stores membership.
         """
         del session, group
         raise NotImplementedError(
@@ -116,8 +116,8 @@ class IdentityAdapter:
         """Return group identifiers for a user.
 
         The default implementation reads ``user.groups``. Adapters for external
-        membership tables should override this method and query them using the
-        supplied session.
+        membership tables should override this method and query them using the supplied
+        session.
         """
         await ensure_loaded(session, user, self.user_groups_attribute)
         groups = getattr(user, self.user_groups_attribute, None) or []
@@ -163,8 +163,8 @@ class IdentityAdapter:
     ) -> Mapping[str, Any]:
         """Resolve user identifiers for API representation.
 
-        Override this method to load the corresponding host user records. The
-        base implementation intentionally performs no database query.
+        Override this method to load the corresponding host user records. The base
+        implementation intentionally performs no database query.
         """
         del session
         return {
@@ -179,8 +179,8 @@ class IdentityAdapter:
     ) -> Mapping[str, Any]:
         """Resolve group identifiers for API representation.
 
-        Override this method to load the corresponding host group records. The
-        base implementation intentionally performs no database query.
+        Override this method to load the corresponding host group records. The base
+        implementation intentionally performs no database query.
         """
         del session
         return {
@@ -230,9 +230,9 @@ class BuiltInIdentityAdapter(IdentityAdapter):
 def is_staff_identity(user: Any) -> bool:
     """Return the single package-wide administrative role decision.
 
-    Administrative hard deletion is intentionally staff-only. A superuser
-    flag does not imply staff status; applications that want a superuser to
-    administer notifications should expose both through their adapter.
+    Administrative hard deletion is intentionally staff-only. A superuser flag does not
+    imply staff status; applications that want a superuser to administer notifications
+    should expose both through their adapter.
     """
     return bool(get_identity_adapter().is_staff(user))
 
@@ -303,9 +303,9 @@ async def hydrate_notification_identities(
 ) -> None:
     """Populate recipient, group, and seen-by projections for notifications.
 
-    All association rows are fetched in batches, then the configured adapter
-    resolves identities. No ORM relationship to a package-owned auth table is
-    involved in the notification query itself.
+    All association rows are fetched in batches, then the configured adapter resolves
+    identities. No ORM relationship to a package-owned auth table is involved in the
+    notification query itself.
     """
     if not notifications:
         return

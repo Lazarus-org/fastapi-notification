@@ -290,9 +290,7 @@ async def test_permanent_deletion_releases_deduplication_key() -> None:
     try:
         with Session(engine) as session:
             user = User(username="author", email="author@example.com")
-            staff = User(
-                username="staff", email="staff@example.com", is_staff=True
-            )
+            staff = User(username="staff", email="staff@example.com", is_staff=True)
             session.add_all([user, staff])
             session.flush()
             dal = _dal(session)
@@ -307,14 +305,15 @@ async def test_permanent_deletion_releases_deduplication_key() -> None:
             first_id = first.id
             session.commit()
 
-            await dal.delete_notification(
-                first_id, soft_delete=False, actor=staff
-            )
+            await dal.delete_notification(first_id, soft_delete=False, actor=staff)
             session.commit()
             assert session.get(Notification, first_id) is None
-            assert session.scalar(
-                select(func.count()).select_from(NotificationDeduplication)
-            ) == 0
+            assert (
+                session.scalar(
+                    select(func.count()).select_from(NotificationDeduplication)
+                )
+                == 0
+            )
 
             replacement = await dal.create_notification(
                 verb="event again",
@@ -326,9 +325,12 @@ async def test_permanent_deletion_releases_deduplication_key() -> None:
             # SQLite may reuse a deleted INTEGER PRIMARY KEY, so verify the
             # replacement by content rather than requiring a different ID.
             assert replacement.verb == "event again"
-            assert session.scalar(
-                select(func.count()).select_from(NotificationDeduplication)
-            ) == 1
+            assert (
+                session.scalar(
+                    select(func.count()).select_from(NotificationDeduplication)
+                )
+                == 1
+            )
     finally:
         engine.dispose()
 
@@ -416,15 +418,16 @@ async def test_expired_notification_purge_releases_its_deduplication_key() -> No
             old_notification_id = old_notification.id
             session.commit()
 
-            purged = await dal.purge_expired(
-                datetime.now(timezone.utc), actor=staff
-            )
+            purged = await dal.purge_expired(datetime.now(timezone.utc), actor=staff)
             assert purged == 1
             session.commit()
             assert session.get(Notification, old_notification_id) is None
-            assert session.scalar(
-                select(func.count()).select_from(NotificationDeduplication)
-            ) == 0
+            assert (
+                session.scalar(
+                    select(func.count()).select_from(NotificationDeduplication)
+                )
+                == 0
+            )
 
             replacement = await dal.create_notification(
                 verb="replacement event",
@@ -521,9 +524,12 @@ async def test_bulk_permanent_deletion_releases_deduplication_keys() -> None:
             session.commit()
 
             assert deleted == 2
-            assert session.scalar(
-                select(func.count()).select_from(NotificationDeduplication)
-            ) == 0
+            assert (
+                session.scalar(
+                    select(func.count()).select_from(NotificationDeduplication)
+                )
+                == 0
+            )
     finally:
         engine.dispose()
 

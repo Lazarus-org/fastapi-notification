@@ -14,7 +14,6 @@ def import_string(dotted_path: str) -> Any:
     Raises:
         ImportError: If the path is malformed, the module cannot be imported, or
             the module does not define the named attribute.
-
     """
     try:
         module_path, class_name = dotted_path.rsplit(".", 1)

@@ -2,9 +2,9 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List, Optional
 
 from sqlalchemy import (
-    CheckConstraint,
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -72,7 +72,6 @@ class Notification(Base):
         data (Optional[dict]): Additional metadata associated with the notification.
         timestamp (datetime): Time when the notification was created.
         expires_at (Optional[datetime]): Optional UTC-aware expiration instant.
-
     """
 
     __tablename__ = "notification"
@@ -100,9 +99,7 @@ class Notification(Base):
     description: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,
-        comment=(
-            "A textual description providing more detail about the notification."
-        ),
+        comment=("A textual description providing more detail about the notification."),
     )
     status: Mapped[str] = mapped_column(
         String(15),
@@ -130,9 +127,7 @@ class Notification(Base):
         default="normal",
         server_default="normal",
         index=True,
-        comment=(
-            "The urgency of the notification: low, normal, high or urgent."
-        ),
+        comment=("The urgency of the notification: low, normal, high or urgent."),
     )
     actor_content_type_id: Mapped[int] = mapped_column(
         ForeignKey("content_type.id", ondelete="CASCADE"),
@@ -226,11 +221,14 @@ class Notification(Base):
         ),
     )
     template_key: Mapped[Optional[str]] = mapped_column(
-        String(128), nullable=True, index=True,
+        String(128),
+        nullable=True,
+        index=True,
         comment="Event template key used to render this notification, if any.",
     )
     locale: Mapped[Optional[str]] = mapped_column(
-        String(35), nullable=True,
+        String(35),
+        nullable=True,
         comment="Resolved locale used for the stored notification text snapshot.",
     )
 
@@ -310,9 +308,9 @@ class Notification(Base):
     def is_expired(self, at: Optional[datetime] = None) -> bool:
         """Return whether the notification has expired at the supplied instant.
 
-        SQLite does not preserve timezone metadata when reading ``DateTime``
-        values. Naive values loaded from that backend are therefore interpreted
-        as UTC; values supplied by callers must remain timezone-aware.
+        SQLite does not preserve timezone metadata when reading ``DateTime`` values.
+        Naive values loaded from that backend are therefore interpreted as UTC; values
+        supplied by callers must remain timezone-aware.
         """
         if self.expires_at is None:
             return False
@@ -327,9 +325,7 @@ class Notification(Base):
 
         return expiration <= current.astimezone(timezone.utc)
 
-    @validates(
-        "actor_object_id", "target_object_id", "action_object_object_id"
-    )
+    @validates("actor_object_id", "target_object_id", "action_object_object_id")
     def _normalize_generic_relation_identifier(
         self, key: str, value: Any
     ) -> Optional[str]:
@@ -345,7 +341,6 @@ class Notification(Base):
 
         Returns:
             str: The string representation of the notification.
-
         """
         return f"{self.description} {naturaltime(self.timestamp)}"
 
@@ -354,13 +349,10 @@ class Notification(Base):
 
         Returns:
             str: The generated title for the notification.
-
         """
         if self.target:
             if self.action_object:
-                return (
-                    f"{self.actor} {self.verb} {self.action_object} on {self.target}"
-                )
+                return f"{self.actor} {self.verb} {self.action_object} on {self.target}"
             return f"{self.actor} {self.verb} {self.target}"
         if self.action_object:
             return f"{self.actor} {self.verb} {self.action_object}"
@@ -378,7 +370,6 @@ class Notification(Base):
         Returns:
             Notification: This notification, with its generic relations
             populated.
-
         """
         await ensure_loaded(
             session,
@@ -435,7 +426,6 @@ class Notification(Base):
         Raises:
             PermissionError: If the user does not have permission to mark the
                 notification as seen.
-
         """
         await NotificationPermission(self).validate_permission_async(
             session, user, "mark as seen"
@@ -494,9 +484,7 @@ class Notification(Base):
             )
         )
         if deleted_result.scalar_one_or_none() is not None:
-            raise PermissionError(
-                "A cleared notification cannot be marked as unseen."
-            )
+            raise PermissionError("A cleared notification cannot be marked as unseen.")
 
         # Repeat the sent/cleared conditions in the DELETE itself. This closes
         # the race where a concurrent request clears the notification after

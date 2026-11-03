@@ -11,12 +11,11 @@ from fastapi_notification.utils.serialization import (
 class NotificationDynamicSerializer:
     """Serializer that selects its fields from configuration.
 
-    When ``SERIALIZER_FIELDS`` is set, exactly those fields are returned;
-    otherwise a ``title`` is returned alongside the default summary fields.
+    When ``SERIALIZER_FIELDS`` is set, exactly those fields are returned; otherwise a
+    ``title`` is returned alongside the default summary fields.
 
-    Rows arrive either as notification instances or as the plain mappings the
-    data access layer returns for summary queries, and both are handled.
-
+    Rows arrive either as notification instances or as the plain mappings the data
+    access layer returns for summary queries, and both are handled.
     """
 
     @classmethod
@@ -25,7 +24,6 @@ class NotificationDynamicSerializer:
 
         Returns:
             List[str]: The configured fields, or the packaged defaults.
-
         """
         return config.notification_serializer_fields or [
             "title",
@@ -42,7 +40,6 @@ class NotificationDynamicSerializer:
 
         Returns:
             str: The generated title.
-
         """
         if config.notification_serializer_fields:
             return str(notification)
@@ -53,9 +50,7 @@ class NotificationDynamicSerializer:
         return str(notification)
 
     @classmethod
-    def to_representation(
-        cls, instance: Union[Any, Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def to_representation(cls, instance: Union[Any, Dict[str, Any]]) -> Dict[str, Any]:
         """Serialize a notification into a dictionary of the configured fields.
 
         Args:
@@ -64,7 +59,6 @@ class NotificationDynamicSerializer:
 
         Returns:
             Dict[str, Any]: The serialized representation.
-
         """
         data: Dict[str, Any] = {}
 
@@ -84,9 +78,7 @@ class NotificationDynamicSerializer:
         return data
 
     @classmethod
-    def to_representation_many(
-        cls, instances: Any
-    ) -> List[Dict[str, Any]]:
+    def to_representation_many(cls, instances: Any) -> List[Dict[str, Any]]:
         """Serialize many notifications into a list of dictionaries.
 
         Args:
@@ -94,6 +86,5 @@ class NotificationDynamicSerializer:
 
         Returns:
             List[Dict[str, Any]]: The serialized representations.
-
         """
         return [cls.to_representation(instance) for instance in instances]

@@ -24,8 +24,6 @@ from fastapi_notification.repository.manager.notification import (
 from fastapi_notification.settings.conf import configure
 
 
-
-
 def _use_immediate_sqlite_transactions(engine: Any) -> None:
     """Serialize SQLite writers before their first read to avoid lock upgrades."""
 
@@ -36,6 +34,7 @@ def _use_immediate_sqlite_transactions(engine: Any) -> None:
     @event.listens_for(engine, "begin")
     def _begin_immediate(connection: Any) -> None:
         connection.exec_driver_sql("BEGIN IMMEDIATE")
+
 
 @pytest.mark.asyncio
 async def test_concurrent_creates_with_same_key_produce_one_notification(
@@ -88,12 +87,16 @@ async def test_concurrent_creates_with_same_key_produce_one_notification(
         assert notification_ids[0] == notification_ids[1]
 
         async with factory() as session:
-            assert await session.scalar(
-                select(func.count()).select_from(Notification)
-            ) == 1
-            assert await session.scalar(
-                select(func.count()).select_from(NotificationDeduplication)
-            ) == 1
+            assert (
+                await session.scalar(select(func.count()).select_from(Notification))
+                == 1
+            )
+            assert (
+                await session.scalar(
+                    select(func.count()).select_from(NotificationDeduplication)
+                )
+                == 1
+            )
     finally:
         await engine.dispose()
 
@@ -143,9 +146,7 @@ async def test_concurrent_sync_sqlite_sessions_converge_on_one_key(
     """Independent connections rely on the unique constraint, not a pre-check."""
     configure(IDENTITY_ADAPTER=BuiltInIdentityAdapter)
     database_path = tmp_path / "notification-deduplication-sync.sqlite3"
-    engine = create_engine(
-        f"sqlite:///{database_path}", connect_args={"timeout": 20}
-    )
+    engine = create_engine(f"sqlite:///{database_path}", connect_args={"timeout": 20})
     _use_immediate_sqlite_transactions(engine)
     Base.metadata.create_all(engine)
     AuthBase.metadata.create_all(engine)
@@ -199,19 +200,16 @@ async def test_concurrent_retries_reclaim_an_expired_key_only_once(
     """Two concurrent retries after key expiry still create only one new row."""
     configure(IDENTITY_ADAPTER=BuiltInIdentityAdapter)
     database_path = tmp_path / "notification-deduplication-expiry.sqlite3"
-    engine = create_engine(
-        f"sqlite:///{database_path}", connect_args={"timeout": 20}
-    )
+    engine = create_engine(f"sqlite:///{database_path}", connect_args={"timeout": 20})
     _use_immediate_sqlite_transactions(engine)
     Base.metadata.create_all(engine)
     AuthBase.metadata.create_all(engine)
 
     try:
+
         def create_initial() -> tuple[int, int]:
             with Session(engine) as session:
-                user = User(
-                    username="expired-race", email="expired-race@example.com"
-                )
+                user = User(username="expired-race", email="expired-race@example.com")
                 session.add(user)
                 session.flush()
                 user_id = user.id
@@ -238,12 +236,9 @@ async def test_concurrent_retries_reclaim_an_expired_key_only_once(
                 initial_id = initial.id
                 session.execute(
                     update(NotificationDeduplication)
-                    .where(
-                        NotificationDeduplication.notification_id == initial_id
-                    )
+                    .where(NotificationDeduplication.notification_id == initial_id)
                     .values(
-                        expires_at=datetime.now(timezone.utc)
-                        - timedelta(seconds=1)
+                        expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)
                     )
                 )
                 session.commit()

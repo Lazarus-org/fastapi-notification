@@ -50,7 +50,6 @@ class NotificationSeen(Base):
 
         Returns:
             str: A representation naming the user and the notification.
-
         """
         user = getattr(self, "user", None)
         notification = getattr(self, "notification", None)
@@ -83,7 +82,6 @@ class NotificationSeen(Base):
 
         Raises:
             PermissionError: If the user is not allowed to see the notification.
-
         """
         await NotificationPermission(notification).validate_permission_async(
             session, user, "mark as seen"

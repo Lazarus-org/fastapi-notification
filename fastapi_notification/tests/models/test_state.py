@@ -23,9 +23,7 @@ pytestmark = pytest.mark.models
 def test_dialect_insert_supports_postgresql_upsert() -> None:
     """The PostgreSQL strategy builds a native conflict-safe insert."""
     fake_session = SimpleNamespace(
-        get_bind=lambda: SimpleNamespace(
-            dialect=SimpleNamespace(name="postgresql")
-        )
+        get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
     )
     statement = _dialect_insert(fake_session, NotificationSeen)
     compiled = str(
@@ -153,15 +151,16 @@ async def test_bulk_fallback_rolls_back_the_whole_batch_on_failure(
         )
 
     result = await session.execute(
-        select(func.count()).select_from(NotificationSeen).where(
-            NotificationSeen.notification_id == notification.id
-        )
+        select(func.count())
+        .select_from(NotificationSeen)
+        .where(NotificationSeen.notification_id == notification.id)
     )
     assert result.scalar_one() == 0
 
 
 async def test_insert_if_absent_raises_if_inserted_row_cannot_be_reloaded() -> None:
     """A successful insert without a retrievable row is treated as corruption."""
+
     class FakeResult:
         rowcount = 1
 

@@ -18,7 +18,6 @@ def check_throttle(user: Any) -> None:
     Raises:
         HTTPException: With status 429 when the user is over their limit, and a
             ``Retry-After`` header saying how long to wait.
-
     """
     throttle_class = config.api_throttle_class
 
@@ -50,7 +49,6 @@ def make_throttle_dependency(
 
     Returns:
         Callable[..., Any]: The throttling dependency.
-
     """
 
     async def enforce_throttle(user: Any = Depends(user_dependency)) -> Any:
@@ -61,7 +59,6 @@ def make_throttle_dependency(
 
         Returns:
             Any: The authenticated user.
-
         """
         check_throttle(user)
         return user

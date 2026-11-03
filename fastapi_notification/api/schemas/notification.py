@@ -10,8 +10,7 @@ from fastapi_notification.utils.loading import loaded_collection
 
 
 class NotificationSerializer(BaseSerializer):
-    """Serializer for the notification model, including related group and user
-    data.
+    """Serializer for the notification model, including related group and user data.
 
     Attributes:
         id (Optional[int]): Unique identifier for the notification.
@@ -34,7 +33,6 @@ class NotificationSerializer(BaseSerializer):
         expires_at (Optional[datetime]): Optional notification expiration.
         template_key (Optional[str]): Event template key used for rendering.
         locale (Optional[str]): Resolved locale used for the text snapshot.
-
     """
 
     id: Optional[int] = None
@@ -67,7 +65,6 @@ class NotificationSerializer(BaseSerializer):
 
         Returns:
             Dict[str, Any]: The serialized notification.
-
         """
         user_serializer = user_serializer_class()
         group_serializer = group_serializer_class()
@@ -114,6 +111,5 @@ def _content_type_label(content_type: Any) -> Optional[str]:
 
     Returns:
         Optional[str]: The ``app_label.model`` label, or ``None``.
-
     """
     return str(content_type) if content_type is not None else None

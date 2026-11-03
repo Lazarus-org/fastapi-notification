@@ -43,8 +43,8 @@ def normalize_locale(value: str) -> str:
 class NotificationTemplate(Base):
     """One localized version of a notification event template.
 
-    The pair ``(key, locale)`` is unique. Rendered notifications retain their
-    text snapshot and do not change when this record is later edited.
+    The pair ``(key, locale)`` is unique. Rendered notifications retain their text
+    snapshot and do not change when this record is later edited.
     """
 
     __tablename__ = "notification_template"
@@ -64,7 +64,6 @@ class NotificationTemplate(Base):
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, default=utcnow, onupdate=utcnow
     )
-
 
     @validates("key")
     def _validate_key(self, key: str, value: str) -> str:

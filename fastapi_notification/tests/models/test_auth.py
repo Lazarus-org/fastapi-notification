@@ -46,6 +46,4 @@ async def test_group_permissions_are_loaded(session: AsyncSession) -> None:
     await session.commit()
     await session.refresh(group)
 
-    assert [granted.codename for granted in group.permissions] == [
-        "clear_notification"
-    ]
+    assert [granted.codename for granted in group.permissions] == ["clear_notification"]

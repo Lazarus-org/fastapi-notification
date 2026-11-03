@@ -27,7 +27,6 @@ def make_filter(**parameters: Any) -> NotificationFilter:
 
     Returns:
         NotificationFilter: The filter set.
-
     """
     defaults = {
         "group__id": None,
@@ -57,7 +56,6 @@ async def run(
 
     Returns:
         List[Notification]: The matching notifications.
-
     """
     statement = filterset.filter_queryset(dal.sent_statement(display_detail=True))
 

@@ -20,7 +20,6 @@ def _as_aware(value: datetime) -> datetime:
 
     Returns:
         datetime: An equivalent timezone aware datetime.
-
     """
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
@@ -42,7 +41,6 @@ def naturaltime(value: Optional[datetime], now: Optional[datetime] = None) -> st
     Returns:
         str: A human readable description, or an empty string when ``value`` is
         ``None``.
-
     """
     if value is None:
         return ""

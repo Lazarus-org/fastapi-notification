@@ -104,9 +104,7 @@ async def test_expired_direct_and_group_notifications_are_hidden_everywhere() ->
                     NotificationRecipient(
                         notification_id=notifications[2].id, recipient_id="10"
                     ),
-                    NotificationSeen(
-                        notification_id=notifications[3].id, user_id="10"
-                    ),
+                    NotificationSeen(notification_id=notifications[3].id, user_id="10"),
                 ]
             )
             session.execute(
@@ -156,12 +154,8 @@ async def test_expired_direct_and_group_notifications_are_hidden_everywhere() ->
                 "total": 2,
                 "unread": 1,
                 "read": 1,
-                "by_category": {
-                    "general": {"total": 2, "unread": 1, "read": 1}
-                },
-                "by_priority": {
-                    "normal": {"total": 2, "unread": 1, "read": 1}
-                },
+                "by_category": {"general": {"total": 2, "unread": 1, "read": 1}},
+                "by_priority": {"normal": {"total": 2, "unread": 1, "read": 1}},
             }
             assert {row["id"] for row in preview} == {
                 notifications[2].id,
@@ -295,32 +289,42 @@ async def test_purge_expired_is_staff_only_retention_aware_and_cascades() -> Non
             with pytest.raises(ValueError, match="timezone-aware"):
                 await dal.purge_expired(datetime(2026, 11, 1), actor=staff)
 
-            purged = await dal.purge_expired(
-                retention_cutoff, limit=1, actor=staff
-            )
+            purged = await dal.purge_expired(retention_cutoff, limit=1, actor=staff)
             assert purged == 1
             session.expire_all()
             assert session.get(Notification, old_id) is None
-            assert session.scalar(
-                select(func.count()).select_from(NotificationRecipient).where(
-                    NotificationRecipient.notification_id == old_id
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(NotificationRecipient)
+                    .where(NotificationRecipient.notification_id == old_id)
                 )
-            ) == 0
-            assert session.scalar(
-                select(func.count()).select_from(NotificationSeen).where(
-                    NotificationSeen.notification_id == old_id
+                == 0
+            )
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(NotificationSeen)
+                    .where(NotificationSeen.notification_id == old_id)
                 )
-            ) == 0
-            assert session.scalar(
-                select(func.count()).select_from(DeletedNotification).where(
-                    DeletedNotification.notification_id == old_id
+                == 0
+            )
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(DeletedNotification)
+                    .where(DeletedNotification.notification_id == old_id)
                 )
-            ) == 0
-            assert session.scalar(
-                select(func.count()).select_from(notification_group).where(
-                    notification_group.c.notification_id == old_id
+                == 0
+            )
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(notification_group)
+                    .where(notification_group.c.notification_id == old_id)
                 )
-            ) == 0
+                == 0
+            )
 
             # A second batch purges the next old item; recent/future/never-expiring
             # records remain until their own retention cutoff is reached.
@@ -347,9 +351,7 @@ async def test_purge_rejects_future_cutoff_and_invalid_limit() -> None:
             dal = NotificationDataAccessLayer(
                 AsyncExecutionAdapter(session)  # type: ignore[arg-type]
             )
-            assert await dal.purge_expired(
-                datetime.now(timezone.utc), actor=staff
-            ) == 0
+            assert await dal.purge_expired(datetime.now(timezone.utc), actor=staff) == 0
             with pytest.raises(ValueError, match="must not be in the future"):
                 await dal.purge_expired(
                     datetime.now(timezone.utc) + timedelta(seconds=1), actor=staff

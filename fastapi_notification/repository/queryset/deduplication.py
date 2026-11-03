@@ -35,9 +35,9 @@ async def _get_linked_notification(
     """Read the linked notification as a current row on locking-read dialects.
 
     MySQL's default REPEATABLE READ isolation can hide a concurrently committed
-    notification from a plain ``Session.get`` after the ledger row was observed
-    through ``SELECT FOR UPDATE``. Using the same current-read semantics avoids
-    treating a valid key as orphaned.
+    notification from a plain ``Session.get`` after the ledger row was observed through
+    ``SELECT FOR UPDATE``. Using the same current-read semantics avoids treating a valid
+    key as orphaned.
     """
     statement = (
         select(Notification)

@@ -1,8 +1,7 @@
 """fastapi-notification.
 
-A FastAPI package developed by Lazarus for efficiently handling
-notifications through various APIs.
-
+A FastAPI package developed by Lazarus for efficiently handling notifications through
+various APIs.
 """
 
 from fastapi_notification.api.routers.notification import create_router
@@ -22,15 +21,15 @@ from fastapi_notification.models import (
     Notification,
     NotificationCategory,
     NotificationDeduplication,
-    NotificationPriority,
-    NotificationPreference,
-    NotificationQuietHours,
-    NotificationDigestSchedule,
     NotificationDigestBatch,
-    NotificationTemplate,
+    NotificationDigestSchedule,
+    NotificationPreference,
+    NotificationPriority,
+    NotificationQuietHours,
     NotificationRecipient,
     NotificationSeen,
     NotificationStatus,
+    NotificationTemplate,
     Permission,
     User,
     register_content_model,
@@ -38,11 +37,11 @@ from fastapi_notification.models import (
 from fastapi_notification.repository.manager.notification import (
     NotificationDataAccessLayer,
 )
-from fastapi_notification.repository.manager.scheduling import (
-    NotificationSchedulingDataAccessLayer,
-)
 from fastapi_notification.repository.manager.preferences import (
     NotificationPreferenceDataAccessLayer,
+)
+from fastapi_notification.repository.manager.scheduling import (
+    NotificationSchedulingDataAccessLayer,
 )
 from fastapi_notification.repository.manager.templates import (
     NotificationTemplateDataAccessLayer,

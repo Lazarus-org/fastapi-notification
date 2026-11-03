@@ -18,19 +18,23 @@ from fastapi_notification.api.schemas.notification_preference import (
     NotificationPreferenceUpdate,
 )
 from fastapi_notification.api.schemas.notification_scheduling import (
-    DigestScheduleItem, DigestScheduleList, DigestScheduleUpdate,
-    QuietHoursItem, QuietHoursList, QuietHoursUpdate,
+    DigestScheduleItem,
+    DigestScheduleList,
+    DigestScheduleUpdate,
+    QuietHoursItem,
+    QuietHoursList,
+    QuietHoursUpdate,
 )
 from fastapi_notification.api.schemas.notification_summary import (
     NotificationPreviewItem,
     NotificationPreviewResponse,
     NotificationSummaryResponse,
 )
-from fastapi_notification.repository.manager.scheduling import (
-    NotificationSchedulingDataAccessLayer,
-)
 from fastapi_notification.repository.manager.preferences import (
     NotificationPreferenceDataAccessLayer,
+)
+from fastapi_notification.repository.manager.scheduling import (
+    NotificationSchedulingDataAccessLayer,
 )
 from fastapi_notification.utils.serialization import generate_title
 
@@ -63,7 +67,6 @@ class NotificationRoutes(BaseNotificationRoutes):
     - Only authenticated users may interact with notifications.
     - Every user, including staff and superusers, sees only notifications
       addressed to them directly or through a group they belong to.
-
     """
 
     async def get_statement(
@@ -85,7 +88,6 @@ class NotificationRoutes(BaseNotificationRoutes):
 
         Returns:
             Select: The statement.
-
         """
         dal = self.get_dal(session)
         groups = await self.get_user_groups(session, user)
@@ -121,7 +123,6 @@ def create_notification_router(
 
     Returns:
         APIRouter: The configured router.
-
     """
     from fastapi_notification.settings.checks import run_checks
 
@@ -154,8 +155,7 @@ def create_notification_router(
         ).list_for_user(user)
         return NotificationPreferenceList(
             results=[
-                NotificationPreferenceItem.model_validate(item)
-                for item in preferences
+                NotificationPreferenceItem.model_validate(item) for item in preferences
             ]
         ).model_dump()
 
@@ -211,22 +211,24 @@ def create_notification_router(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get(
-        "/quiet-hours/", response_model=QuietHoursList,
+        "/quiet-hours/",
+        response_model=QuietHoursList,
         summary="List the current user's quiet-hour rules",
     )
     async def list_notification_quiet_hours(
         session: AsyncSession = Depends(session_dep),
         user: Any = Depends(user_dep),
     ) -> Dict[str, Any]:
-        rows = await NotificationSchedulingDataAccessLayer(
-            session
-        ).list_quiet_hours(user)
+        rows = await NotificationSchedulingDataAccessLayer(session).list_quiet_hours(
+            user
+        )
         return QuietHoursList(
             results=[QuietHoursItem.model_validate(row) for row in rows]
         ).model_dump()
 
     @router.put(
-        "/quiet-hours/", response_model=QuietHoursItem,
+        "/quiet-hours/",
+        response_model=QuietHoursItem,
         summary="Create or update a quiet-hour rule",
     )
     async def set_notification_quiet_hours(
@@ -235,21 +237,27 @@ def create_notification_router(
         user: Any = Depends(user_dep),
     ) -> Dict[str, Any]:
         row = await NotificationSchedulingDataAccessLayer(session).set_quiet_hours(
-            user, channel=payload.channel, start_time=payload.start_time,
-            end_time=payload.end_time, timezone_name=payload.timezone,
-            enabled=payload.enabled, allow_urgent=payload.allow_urgent,
+            user,
+            channel=payload.channel,
+            start_time=payload.start_time,
+            end_time=payload.end_time,
+            timezone_name=payload.timezone,
+            enabled=payload.enabled,
+            allow_urgent=payload.allow_urgent,
         )
         response_payload = QuietHoursItem.model_validate(row).model_dump()
         await session.commit()
         return response_payload
 
     @router.delete(
-        "/quiet-hours/", status_code=status.HTTP_204_NO_CONTENT,
+        "/quiet-hours/",
+        status_code=status.HTTP_204_NO_CONTENT,
         summary="Remove a quiet-hour rule",
     )
     async def reset_notification_quiet_hours(
         channel: str = Query(
-            "*", max_length=64,
+            "*",
+            max_length=64,
             pattern=r"^(\*|[A-Za-z0-9][A-Za-z0-9._-]{0,63})$",
         ),
         session: AsyncSession = Depends(session_dep),
@@ -262,7 +270,8 @@ def create_notification_router(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get(
-        "/digest-schedules/", response_model=DigestScheduleList,
+        "/digest-schedules/",
+        response_model=DigestScheduleList,
         summary="List the current user's digest schedules",
     )
     async def list_notification_digest_schedules(
@@ -277,7 +286,8 @@ def create_notification_router(
         ).model_dump()
 
     @router.put(
-        "/digest-schedules/", response_model=DigestScheduleItem,
+        "/digest-schedules/",
+        response_model=DigestScheduleItem,
         summary="Create or update a digest schedule",
     )
     async def set_notification_digest_schedule(
@@ -286,21 +296,27 @@ def create_notification_router(
         user: Any = Depends(user_dep),
     ) -> Dict[str, Any]:
         row = await NotificationSchedulingDataAccessLayer(session).set_digest_schedule(
-            user, channel=payload.channel, frequency=payload.frequency,
-            local_time=payload.local_time, timezone_name=payload.timezone,
-            weekday=payload.weekday, enabled=payload.enabled,
+            user,
+            channel=payload.channel,
+            frequency=payload.frequency,
+            local_time=payload.local_time,
+            timezone_name=payload.timezone,
+            weekday=payload.weekday,
+            enabled=payload.enabled,
         )
         response_payload = DigestScheduleItem.model_validate(row).model_dump()
         await session.commit()
         return response_payload
 
     @router.delete(
-        "/digest-schedules/", status_code=status.HTTP_204_NO_CONTENT,
+        "/digest-schedules/",
+        status_code=status.HTTP_204_NO_CONTENT,
         summary="Remove a digest schedule",
     )
     async def reset_notification_digest_schedule(
         channel: str = Query(
-            "email", max_length=64,
+            "email",
+            max_length=64,
             pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
         ),
         session: AsyncSession = Depends(session_dep),
@@ -326,12 +342,11 @@ def create_notification_router(
         ) -> Dict[str, Any]:
             """Return counts and category/priority breakdowns for the current user.
 
-            Counts include sent notifications addressed directly to the user or
-            to one of their groups, exclude notifications cleared by that user,
-            and honour the same filters as the notification listing. The
-            ``by_category`` and ``by_priority`` mappings each include total,
-            unread and read counts for their respective keys.
-
+            Counts include sent notifications addressed directly to the user or to one
+            of their groups, exclude notifications cleared by that user, and honour the
+            same filters as the notification listing. The ``by_category`` and
+            ``by_priority`` mappings each include total, unread and read counts for
+            their respective keys.
             """
             dal = routes.get_dal(session)
             groups = await routes.get_user_groups(session, user)
@@ -357,11 +372,9 @@ def create_notification_router(
         ) -> Dict[str, Any]:
             """Return the most recent visible notifications, read or unread.
 
-            The response is bounded to 1–20 items (5 by default). It includes
-            direct and group notifications, excludes unsent and user-cleared
-            notifications, and reports whether the current user has seen each
-            item.
-
+            The response is bounded to 1–20 items (5 by default). It includes direct and
+            group notifications, excludes unsent and user-cleared notifications, and
+            reports whether the current user has seen each item.
             """
             dal = routes.get_dal(session)
             groups = await routes.get_user_groups(session, user)
@@ -412,7 +425,6 @@ def create_notification_router(
 
             Returns:
                 Dict[str, Any]: The paginated notifications.
-
             """
             return await routes.list_notifications(request, session, user, filterset)
 
@@ -431,7 +443,6 @@ def create_notification_router(
 
         Returns:
             Dict[str, str]: How many notifications were marked as seen.
-
         """
         count = await routes.get_dal(session).mark_all_as_seen(user)
         await session.commit()
@@ -461,14 +472,11 @@ def create_notification_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist or is not visible to the user.
-
             """
             statement = await routes.get_statement(session, user, display_detail=True)
             statement = filterset.filter_queryset(statement)
 
-            notification = await routes.get_dal(session).get(
-                statement, notification_id
-            )
+            notification = await routes.get_dal(session).get(statement, notification_id)
 
             if notification is None:
                 raise HTTPException(
@@ -504,7 +512,6 @@ def create_notification_router(
             Raises:
                 HTTPException: With status 404 when the notification does not
                     exist or is not visible to the user.
-
             """
             dal = routes.get_dal(session)
             groups = await routes.get_user_groups(session, user)

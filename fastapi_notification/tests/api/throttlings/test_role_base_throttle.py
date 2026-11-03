@@ -27,7 +27,6 @@ def throttle() -> RoleBasedUserRateThrottle:
 
     Returns:
         RoleBasedUserRateThrottle: The throttle.
-
     """
     return RoleBasedUserRateThrottle()
 

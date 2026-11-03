@@ -3,14 +3,7 @@
 from datetime import datetime, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import (
-    Boolean,
-    CheckConstraint,
-    Integer,
-    String,
-    Time,
-    UniqueConstraint,
-)
+from sqlalchemy import Boolean, CheckConstraint, Integer, String, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fastapi_notification.models.base import Base, UTCDateTime, utcnow
@@ -33,9 +26,7 @@ class NotificationQuietHours(Base):
 
     __tablename__ = "notification_quiet_hours"
     __table_args__ = (
-        UniqueConstraint(
-            "user_id", "channel", name="notification_quiet_hours_unique"
-        ),
+        UniqueConstraint("user_id", "channel", name="notification_quiet_hours_unique"),
         CheckConstraint(
             "start_time <> end_time", name="ck_notification_quiet_hours_window"
         ),

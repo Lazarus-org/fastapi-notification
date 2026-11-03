@@ -16,7 +16,6 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
     Raises:
         NotImplementedError: Always, until the host supplies a dependency.
-
     """
     raise NotImplementedError(
         "fastapi-notification needs a database session. Pass session_dependency="

@@ -24,7 +24,6 @@ class DeletedNotification(Base):
         notification_id (int): The notification that was soft deleted.
         user_id (str): The host user identifier who deleted it.
         deleted_at (datetime): When the notification was deleted.
-
     """
 
     __tablename__ = "deleted_notifications"
@@ -49,7 +48,6 @@ class DeletedNotification(Base):
 
         Returns:
             str: A representation naming the notification and the deleting user.
-
         """
         user = getattr(self, "user", None)
         notification = getattr(self, "notification", None)
@@ -84,7 +82,6 @@ class DeletedNotification(Base):
         Raises:
             PermissionError: If the user is not allowed to delete the
                 notification.
-
         """
         await NotificationPermission(notification).validate_permission_async(
             session, user, "delete"

@@ -11,7 +11,6 @@ def group_serializer_class() -> Type[BaseSerializer]:
 
     Returns:
         Type[BaseSerializer]: The configured class, or the default.
-
     """
     return config.group_serializer_class or GroupSerializer
 
@@ -21,6 +20,5 @@ def user_serializer_class() -> Type[BaseSerializer]:
 
     Returns:
         Type[BaseSerializer]: The configured class, or the default.
-
     """
     return config.user_serializer_class or UserSerializer

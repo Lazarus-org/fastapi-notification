@@ -47,7 +47,6 @@ def make_request() -> Request:
 
     Returns:
         Request: The request.
-
     """
     return Request(
         {

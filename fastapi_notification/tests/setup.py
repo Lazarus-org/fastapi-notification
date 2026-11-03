@@ -25,7 +25,6 @@ def build_app(
 
     Returns:
         FastAPI: The configured application.
-
     """
 
     async def get_session() -> AsyncIterator[AsyncSession]:
@@ -33,8 +32,8 @@ def build_app(
 
         Yields:
             AsyncSession: The session.
-
         """
+
         async with session_factory() as session:
             yield session
 
@@ -43,7 +42,6 @@ def build_app(
 
         Returns:
             Any: The user, or ``None`` when the test is anonymous.
-
         """
         user_id = current_user.get("id")
         if user_id is None:
@@ -77,7 +75,6 @@ def make_app_factory(
 
     Returns:
         Callable[..., FastAPI]: The application factory.
-
     """
 
     def factory(prefix: str = "") -> FastAPI:

@@ -64,10 +64,9 @@ def _ids(value: Any, identity_type: str = "user") -> List[str]:
 class NotificationQuerySet:
     """Builds the SELECT statements behind every notification query.
 
-    Statements are built rather than executed so the API layer can layer
-    filtering, searching, ordering and pagination on top before running them,
-    which is the role Django's lazy ``QuerySet`` played in the original package.
-
+    Statements are built rather than executed so the API layer can layer filtering,
+    searching, ordering and pagination on top before running them, which is the role
+    Django's lazy ``QuerySet`` played in the original package.
     """
 
     #: Membership conditions are expressed as subqueries rather than joins, so a
@@ -80,7 +79,6 @@ class NotificationQuerySet:
 
         Returns:
             ColumnElement[bool]: The membership condition.
-
         """
         return Notification.id.in_(
             select(NotificationRecipient.notification_id).where(
@@ -96,7 +94,6 @@ class NotificationQuerySet:
 
         Returns:
             ColumnElement[bool]: The membership condition.
-
         """
         return Notification.id.in_(
             select(notification_group.c.notification_id).where(
@@ -112,7 +109,6 @@ class NotificationQuerySet:
 
         Returns:
             ColumnElement[bool]: The membership condition.
-
         """
         return Notification.id.in_(
             select(NotificationSeen.notification_id).where(
@@ -129,7 +125,6 @@ class NotificationQuerySet:
 
         Returns:
             ColumnElement[bool]: The membership condition.
-
         """
         subquery = select(DeletedNotification.notification_id)
         if deleted_by is not None:
@@ -173,7 +168,6 @@ class NotificationQuerySet:
 
         Returns:
             Select: The statement, ordered newest first.
-
         """
         if display_detail:
             statement = select(Notification)
@@ -218,7 +212,6 @@ class NotificationQuerySet:
 
         Returns:
             Select: The statement.
-
         """
         conditions: List[ColumnElement[bool]] = []
         if recipients:
@@ -264,7 +257,6 @@ class NotificationQuerySet:
 
         Returns:
             Select: The statement.
-
         """
         all_conditions: List[ColumnElement[bool]] = list(conditions or [])
         all_conditions.append(Notification.is_sent.is_(is_sent))
@@ -311,7 +303,6 @@ class NotificationQuerySet:
 
         Returns:
             Select: The statement.
-
         """
         return self._sent_statement(
             True,
@@ -346,7 +337,6 @@ class NotificationQuerySet:
 
         Returns:
             Select: The statement.
-
         """
         return self._sent_statement(
             False,
@@ -377,7 +367,6 @@ class NotificationQuerySet:
 
         Returns:
             Select: The statement.
-
         """
         all_conditions = list(conditions or [])
         all_conditions.append(self.seen_condition(seen_by))
@@ -409,7 +398,6 @@ class NotificationQuerySet:
 
         Returns:
             Select: The statement.
-
         """
         all_conditions = list(conditions or [])
         all_conditions.append(~self.seen_condition(unseen_by))
@@ -436,7 +424,6 @@ class NotificationQuerySet:
         Returns:
             Select: Grouped counts by category, priority and read state. The DAL
             folds these rows into total/unread/read and dimension breakdowns.
-
         """
         visible_ids = (
             statement.with_only_columns(
@@ -476,7 +463,6 @@ class NotificationQuerySet:
 
         Returns:
             Select: A query returning each notification and its ``is_seen`` flag.
-
         """
         return (
             statement.with_only_columns(
@@ -509,7 +495,6 @@ class NotificationQuerySet:
 
         Returns:
             Select: The statement, including expired rows for historical inspection.
-
         """
         return self._notifications_statement(
             display_detail=display_detail,
@@ -532,7 +517,6 @@ async def fetch(
     Returns:
         Union[List[Notification], Rows]: Notification instances when detailed,
         otherwise a list of dictionaries.
-
     """
     result = await session.execute(statement)
 
@@ -551,7 +535,6 @@ async def count(session: AsyncSession, statement: Select) -> int:
 
     Returns:
         int: The number of matching rows.
-
     """
     subquery = statement.order_by(None).subquery()
     result = await session.execute(select(func.count()).select_from(subquery))
@@ -602,7 +585,6 @@ async def create_notification(
 
     Returns:
         Notification: The created notification.
-
     """
     if expires_at is not None:
         if not isinstance(expires_at, datetime):
@@ -695,7 +677,6 @@ async def update_notification(
 
     Raises:
         LookupError: If no notification has the given ID.
-
     """
     if expires_at is not None and clear_expires_at:
         raise ValueError("Set expires_at or clear it, not both.")
@@ -771,7 +752,6 @@ async def delete_notification(
         ValueError: If a soft delete is requested without a recipient.
         LookupError: If the notification does not exist or is not visible to
             the recipient.
-
     """
     if soft_delete and recipient is None:
         raise ValueError("the recipient most be given if it is soft delete")
@@ -816,7 +796,6 @@ async def mark_all_as_seen(session: AsyncSession, user: Any) -> int:
     Returns:
         int: The number of notifications marked as seen, including notifications
             addressed to groups the user belongs to.
-
     """
     group_ids = await get_identity_adapter().get_user_group_ids(session, user)
     statement = NotificationQuerySet().unseen(
@@ -853,7 +832,6 @@ async def mark_all_as_sent(
 
     Returns:
         int: The number of notifications marked as sent.
-
     """
     statement = NotificationQuerySet().unsent(
         recipients=recipients, groups=groups, display_detail=True
@@ -883,7 +861,6 @@ async def clear_all(session: AsyncSession, user: Any) -> None:
     Args:
         session (AsyncSession): The session used to write.
         user (Any): The user whose notifications should be cleared.
-
     """
     group_ids = await get_identity_adapter().get_user_group_ids(session, user)
     statement = NotificationQuerySet().seen(
@@ -921,7 +898,6 @@ async def delete_many(
 
     Raises:
         PermissionError: If the actor is not staff.
-
     """
     require_staff_identity(actor)
     notifications = await fetch(session, statement, display_detail=True)
@@ -946,11 +922,11 @@ async def purge_expired(
 ) -> int:
     """Permanently purge expired notifications older than an explicit cutoff.
 
-    This is an opt-in maintenance operation. Expiration alone never deletes
-    records; callers choose the retention cutoff and invoke this method
-    explicitly. Related recipient, group, seen and soft-delete rows are removed
-    before the notification rows so the operation also works on SQLite
-    connections where foreign-key enforcement is not enabled.
+    This is an opt-in maintenance operation. Expiration alone never deletes records;
+    callers choose the retention cutoff and invoke this method explicitly. Related
+    recipient, group, seen and soft-delete rows are removed before the notification rows
+    so the operation also works on SQLite connections where foreign-key enforcement is
+    not enabled.
     """
     require_staff_identity(actor)
     if not isinstance(expired_before, datetime):
@@ -1001,7 +977,6 @@ async def add_recipients(
         session (AsyncSession): The session used to write.
         notification (Notification): The notification to address.
         recipients (Recipients): The users to address it to.
-
     """
     recipient_objects = list(_as_sequence(recipients))
     notification.recipient = list(notification.recipient) + recipient_objects
@@ -1028,7 +1003,6 @@ async def add_groups(
         session (AsyncSession): The session used to write.
         notification (Notification): The notification to address.
         groups (Groups): The groups to address it to.
-
     """
     group_objects = list(_as_sequence(groups))
     notification.group = list(notification.group) + group_objects
@@ -1059,7 +1033,6 @@ async def get_notification(
     Returns:
         Optional[Notification]: The notification, or ``None`` when it is not
         visible through the statement.
-
     """
     result = await session.execute(statement.where(Notification.id == notification_id))
     return result.scalars().unique().one_or_none()

@@ -16,8 +16,8 @@ from fastapi_notification.models.state import insert_if_absent
 class NotificationPreferenceDataAccessLayer:
     """Read and update delivery preferences for one authenticated identity.
 
-    Preferences are policy data for delivery adapters. They do not remove,
-    hide, or mutate notifications already persisted in a user's inbox.
+    Preferences are policy data for delivery adapters. They do not remove, hide, or
+    mutate notifications already persisted in a user's inbox.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -105,18 +105,17 @@ class NotificationPreferenceDataAccessLayer:
         channel = normalize_preference_key(channel)
         user_id = get_identity_adapter().get_user_id(user)
         result = await self.session.execute(
-            select(NotificationPreference.category,
-                   NotificationPreference.channel,
-                   NotificationPreference.enabled).where(
+            select(
+                NotificationPreference.category,
+                NotificationPreference.channel,
+                NotificationPreference.enabled,
+            ).where(
                 NotificationPreference.user_id == user_id,
                 NotificationPreference.category.in_([category, "*"]),
                 NotificationPreference.channel.in_([channel, "*"]),
             )
         )
-        rules = {
-            (row.category, row.channel): bool(row.enabled)
-            for row in result.all()
-        }
+        rules = {(row.category, row.channel): bool(row.enabled) for row in result.all()}
         for key in (
             (category, channel),
             (category, "*"),

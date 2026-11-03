@@ -14,9 +14,9 @@ class NotificationPermission:
     """Determine whether a host identity may act on a notification.
 
     Permission checks use the notification's opaque recipient/group association
-    identifiers and the configured identity adapter. Staff and superuser flags
-    do not grant access to another user's personal notification. Administrative
-    operations are authorized separately at their dedicated API boundaries.
+    identifiers and the configured identity adapter. Staff and superuser flags do not
+    grant access to another user's personal notification. Administrative operations are
+    authorized separately at their dedicated API boundaries.
     """
 
     def __init__(self, notification: Any) -> None:
@@ -25,11 +25,11 @@ class NotificationPermission:
     def user_has_permission(self, user: Any) -> bool:
         """Check permission against identity collections already in memory.
 
-        This synchronous helper is limited to already-hydrated notification and
-        identity data. An adapter with database-backed group membership must
-        implement ``get_user_group_ids_sync`` as well. Database-backed
-        application code should use :meth:`validate_permission_async`, which
-        calls the authoritative asynchronous adapter method.
+        This synchronous helper is limited to already-hydrated notification and identity
+        data. An adapter with database-backed group membership must implement
+        ``get_user_group_ids_sync`` as well. Database-backed application code should use
+        :meth:`validate_permission_async`, which calls the authoritative asynchronous
+        adapter method.
         """
         adapter = get_identity_adapter()
         user_id = adapter.get_user_id(user)
@@ -52,9 +52,7 @@ class NotificationPermission:
             adapter.get_group_id(group)
             for group in getattr(self.notification, "group", [])
         }
-        return (
-            is_recipient or bool(user_group_ids.intersection(notification_group_ids))
-        )
+        return is_recipient or bool(user_group_ids.intersection(notification_group_ids))
 
     def validate_permission(self, user: Any, action: str) -> None:
         """Validate permission using already hydrated identity collections."""

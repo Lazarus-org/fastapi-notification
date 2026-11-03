@@ -7,10 +7,9 @@ from fastapi import Request
 class DefaultLimitOffSetPagination:
     """Limit/offset pagination that clamps the page size to a sane range.
 
-    A limit below the minimum, or one that is not a number, falls back to the
-    default; a limit above the maximum is capped rather than rejected, so a
-    client asking for too much still gets a usable response.
-
+    A limit below the minimum, or one that is not a number, falls back to the default; a
+    limit above the maximum is capped rather than rejected, so a client asking for too
+    much still gets a usable response.
     """
 
     # Minimum limit allowed in query parameters
@@ -35,7 +34,6 @@ class DefaultLimitOffSetPagination:
         Returns:
             int: The number of items to return, constrained by the configured
             minimum and maximum, or the default when not usable.
-
         """
         limit = request.query_params.get(self.limit_query_param)
 
@@ -64,7 +62,6 @@ class DefaultLimitOffSetPagination:
 
         Returns:
             int: The number of items to skip; never negative.
-
         """
         offset = request.query_params.get(self.offset_query_param)
 
@@ -86,7 +83,6 @@ class DefaultLimitOffSetPagination:
 
         Returns:
             str: The absolute URL of that page.
-
         """
         params: Dict[str, Any] = dict(request.query_params)
         params[self.limit_query_param] = limit
@@ -107,7 +103,6 @@ class DefaultLimitOffSetPagination:
 
         Returns:
             Optional[str]: The next page URL, or ``None`` on the last page.
-
         """
         if offset + limit >= count:
             return None
@@ -125,7 +120,6 @@ class DefaultLimitOffSetPagination:
 
         Returns:
             Optional[str]: The previous page URL, or ``None`` on the first page.
-
         """
         if offset <= 0:
             return None
@@ -144,7 +138,6 @@ class DefaultLimitOffSetPagination:
         Returns:
             Dict[str, Any]: The response body, with ``count``, ``next``,
             ``previous`` and ``results``.
-
         """
         limit = self.get_limit(request)
         offset = self.get_offset(request)

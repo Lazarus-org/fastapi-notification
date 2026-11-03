@@ -21,10 +21,9 @@ class ThrottleHistory:
     """In-memory record of when each identity last made a request.
 
     Keeps a sliding window per identity, which is enough for a single process.
-    Deployments running several workers should point the throttle at a shared
-    store by subclassing :class:`RoleBasedUserRateThrottle` and overriding
+    Deployments running several workers should point the throttle at a shared store by
+    subclassing :class:`RoleBasedUserRateThrottle` and overriding
     :meth:`RoleBasedUserRateThrottle.get_history`.
-
     """
 
     def __init__(self) -> None:
@@ -38,7 +37,6 @@ class ThrottleHistory:
 
         Returns:
             Deque[float]: The timestamps of that identity's recent requests.
-
         """
         return self._entries[key]
 
@@ -58,7 +56,6 @@ class RoleBasedUserRateThrottle:
     ``AUTHENTICATED_USER_THROTTLE_RATE`` (30 a minute by default), while staff
     users get the higher ``STAFF_USER_THROTTLE_RATE`` (100 a minute). Both come
     from settings, so the limits can be tuned without touching code.
-
     """
 
     scope: str = "user"
@@ -71,7 +68,6 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             str: The rate, as ``"number/time_unit"``.
-
         """
         from fastapi_notification.settings.conf import config
 
@@ -97,7 +93,6 @@ class RoleBasedUserRateThrottle:
 
         Raises:
             ValueError: If the rate is not in the expected format.
-
         """
         try:
             number, _, unit = rate.partition("/")
@@ -119,7 +114,6 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             str: The history key.
-
         """
         from fastapi_notification.identity import get_identity_adapter
 
@@ -141,7 +135,6 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             ThrottleHistory: The history store.
-
         """
         return history
 
@@ -156,7 +149,6 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             bool: True if the request is allowed, False if it is throttled.
-
         """
         num_requests, duration = self.parse_rate(self.get_rate(user))
 
@@ -180,7 +172,6 @@ class RoleBasedUserRateThrottle:
 
         Returns:
             float: The number of seconds to wait; zero when not throttled.
-
         """
         _, duration = self.parse_rate(self.get_rate(user))
         timestamps = self.get_history().get(self.get_cache_key(user))

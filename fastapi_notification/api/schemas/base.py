@@ -11,7 +11,6 @@ class BaseSerializer(BaseModel):
 
     Reads from ORM instances as well as plain mappings, and honours the
     ``SERIALIZER_EXCLUDE_NULL_FIELDS`` setting when producing output.
-
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -26,7 +25,6 @@ class BaseSerializer(BaseModel):
         Returns:
             Dict[str, Any]: The serialized representation, with null fields
             stripped when the setting asks for it.
-
         """
         data = cls.model_validate(instance).model_dump()
 
@@ -44,6 +42,5 @@ class BaseSerializer(BaseModel):
 
         Returns:
             List[Dict[str, Any]]: The serialized representations.
-
         """
         return [cls.to_representation(instance) for instance in instances]

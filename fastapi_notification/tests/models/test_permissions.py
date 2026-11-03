@@ -240,9 +240,7 @@ async def test_low_level_query_delete_requires_staff_actor() -> None:
     user = FakeUser(33, groups=[])
 
     with pytest.raises(PermissionError, match="Staff permission is required"):
-        await queryset.delete_notification(
-            None, 1, soft_delete=False, actor=user
-        )
+        await queryset.delete_notification(None, 1, soft_delete=False, actor=user)
 
 
 @pytest.mark.asyncio

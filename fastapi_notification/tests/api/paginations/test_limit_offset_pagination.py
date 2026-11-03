@@ -18,7 +18,6 @@ def make_request(query: str = "") -> Request:
 
     Returns:
         Request: The request.
-
     """
     return Request(
         {
@@ -41,7 +40,6 @@ def paginator() -> DefaultLimitOffSetPagination:
 
     Returns:
         DefaultLimitOffSetPagination: The paginator.
-
     """
     return DefaultLimitOffSetPagination()
 

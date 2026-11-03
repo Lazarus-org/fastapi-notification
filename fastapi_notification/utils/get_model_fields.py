@@ -15,7 +15,6 @@ def get_serializable_model_fields(model: Type[Any]) -> List[str]:
 
     Returns:
         list: A list of serializable field names on the model.
-
     """
     mapper = inspect(model)
 

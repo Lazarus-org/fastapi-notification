@@ -62,9 +62,7 @@ def test_expiration_boundary_is_inclusive() -> None:
 
 def test_naive_comparison_instant_is_rejected() -> None:
     """Expiration checks never guess the timezone of a caller-supplied instant."""
-    notification = build_notification(
-        datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
-    )
+    notification = build_notification(datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc))
 
     with pytest.raises(ValueError, match="timezone-aware"):
         notification.is_expired(datetime(2026, 11, 2, 12, 0))
@@ -75,6 +73,7 @@ def test_naive_sqlite_loaded_expiration_is_interpreted_as_utc() -> None:
     notification = build_notification()
     notification.__dict__["expires_at"] = datetime(2026, 11, 2, 12, 0)
 
-    assert notification.is_expired(
-        datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
-    ) is True
+    assert (
+        notification.is_expired(datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc))
+        is True
+    )

@@ -42,9 +42,7 @@ class DefaultPaginationAndFilteringSettings:
     )
     filterset_class: Optional[str] = None
     ordering_fields: List[str] = field(
-        default_factory=lambda: [
-            "id", "timestamp", "public", "category", "priority"
-        ]
+        default_factory=lambda: ["id", "timestamp", "public", "category", "priority"]
     )
     search_fields: List[str] = field(default_factory=lambda: ["verb", "description"])
 

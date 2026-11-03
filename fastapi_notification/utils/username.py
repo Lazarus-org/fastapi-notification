@@ -17,7 +17,6 @@ def get_username_field(user: Any) -> str:
     Returns:
         str: The declared username field, or ``"username"`` when the model does
         not declare one.
-
     """
     owner = user if isinstance(user, type) else type(user)
     return getattr(owner, USERNAME_FIELD_ATTRIBUTE, DEFAULT_USERNAME_FIELD)
@@ -34,6 +33,5 @@ def get_username(user: Any) -> str:
     Returns:
         str: The username of the user, or ``"Unknown"`` if the field is not
         available.
-
     """
     return getattr(user, get_username_field(user), "Unknown")

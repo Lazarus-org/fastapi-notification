@@ -27,7 +27,6 @@ def create_router(
 
     Returns:
         APIRouter: The combined router.
-
     """
     router = APIRouter(prefix=prefix)
 

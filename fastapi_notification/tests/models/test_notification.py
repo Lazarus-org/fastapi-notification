@@ -201,9 +201,7 @@ async def test_mark_as_seen_refreshes_projection_when_record_already_exists(
     notification: Notification, user: User, session: AsyncSession
 ) -> None:
     """An idempotent retry still updates the in-memory seen-by projection."""
-    session.add(
-        NotificationSeen(notification_id=notification.id, user_id=str(user.id))
-    )
+    session.add(NotificationSeen(notification_id=notification.id, user_id=str(user.id)))
     await session.flush()
 
     notification.seen_by = []

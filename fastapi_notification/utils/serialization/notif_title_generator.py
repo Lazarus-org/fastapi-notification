@@ -19,7 +19,6 @@ def generate_title(notification: Dict[str, Any]) -> str:
     Raises:
         ValueError: If no description is present, or the argument is not a
             mapping with ``description`` and ``timestamp`` keys.
-
     """
     try:
         description = notification.get("description")

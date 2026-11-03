@@ -10,10 +10,13 @@ from fastapi_notification.utils.templates import render_template, validate_templ
 
 
 def test_render_template_substitutes_simple_variables():
-    assert render_template(
-        "Order {order_number} paid by {customer}",
-        {"order_number": "A-42", "customer": "Alex"},
-    ) == "Order A-42 paid by Alex"
+    assert (
+        render_template(
+            "Order {order_number} paid by {customer}",
+            {"order_number": "A-42", "customer": "Alex"},
+        )
+        == "Order A-42 paid by Alex"
+    )
 
 
 def test_render_template_preserves_escaped_braces():

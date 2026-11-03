@@ -11,7 +11,6 @@ class PermissionSerializer(BaseSerializer):
         id (Optional[int]): The primary key of the permission.
         name (Optional[str]): The human readable name.
         codename (Optional[str]): The machine readable identifier.
-
     """
 
     id: Optional[Any] = None
@@ -26,7 +25,6 @@ class GroupSerializer(BaseSerializer):
         id (Optional[int]): The primary key of the group.
         name (Optional[str]): The name of the group.
         permissions (List[Dict[str, Any]]): The permissions granted by the group.
-
     """
 
     id: Optional[Any] = None
@@ -42,7 +40,6 @@ class GroupSerializer(BaseSerializer):
 
         Returns:
             Dict[str, Any]: The serialized group.
-
         """
         payload = {
             "id": getattr(instance, "id", None),

@@ -61,7 +61,6 @@ class NotificationDataAccessLayer:
         preview: Returns a bounded set of recent notifications with read state.
         purge_expired: Explicitly removes expired notifications after retention.
         clear_all: Clears all seen notifications for a user, marking them deleted.
-
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -73,7 +72,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             NotificationQuerySet: The statement builder.
-
         """
         return self.query_set
 
@@ -88,7 +86,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The resulting rows.
-
         """
         rows = await queryset.fetch(self.session, statement, display_detail)
         if display_detail:
@@ -114,7 +111,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.all_notifications(recipients, groups, display_detail)
 
@@ -140,7 +136,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.sent(
             recipients,
@@ -173,7 +168,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.unsent(
             recipients,
@@ -203,7 +197,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.seen(
             seen_by, recipients, groups, display_detail, conditions
@@ -228,7 +221,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.unseen(
             unseen_by, recipients, groups, display_detail, conditions
@@ -245,7 +237,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Select: The statement.
-
         """
         return self.query_set.deleted(deleted_by, display_detail)
 
@@ -272,7 +263,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.all_notifications_statement(recipients, groups, display_detail),
@@ -301,7 +291,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.sent_statement(
@@ -337,7 +326,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.unsent_statement(
@@ -370,7 +358,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.seen_statement(
@@ -398,7 +385,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.unseen_statement(
@@ -418,7 +404,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Union[List[Notification], Rows]: The matching notifications.
-
         """
         return await self._execute(
             self.deleted_statement(deleted_by, display_detail), display_detail
@@ -435,7 +420,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Optional[Notification]: The notification, or ``None``.
-
         """
         notification = await queryset.get_notification(
             self.session, statement, notification_id
@@ -459,7 +443,6 @@ class NotificationDataAccessLayer:
         Returns:
             Dict[str, Any]: Total/read counts plus grouped category and priority
                 breakdowns. Each breakdown contains total, unread and read.
-
         """
         aggregate = self.query_set.summary_statement(statement, user)
         result = await self.session.execute(aggregate)
@@ -507,7 +490,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             List[Dict[str, Any]]: Preview rows including the ``is_seen`` flag.
-
         """
         preview_statement = self.query_set.preview_statement(statement, user, limit)
         result = await self.session.execute(preview_statement)
@@ -521,7 +503,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             int: The number of matching rows.
-
         """
         return await queryset.count(self.session, statement)
 
@@ -795,7 +776,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             Notification: The updated notification instance.
-
         """
         if category is not None:
             category = normalize_category(category)
@@ -835,7 +815,6 @@ class NotificationDataAccessLayer:
         Raises:
             PermissionError: If permanent deletion is requested without a staff
                 actor.
-
         """
         if not soft_delete:
             require_staff_identity(actor)
@@ -858,7 +837,6 @@ class NotificationDataAccessLayer:
 
         Raises:
             PermissionError: If the actor is not staff.
-
         """
         require_staff_identity(actor)
         return await queryset.delete_many(self.session, statement, actor=actor)
@@ -876,7 +854,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             int: The number of notifications marked as sent.
-
         """
         return await queryset.mark_all_as_sent(self.session, recipients, groups)
 
@@ -888,7 +865,6 @@ class NotificationDataAccessLayer:
 
         Returns:
             int: The number of notifications marked as seen.
-
         """
         return await queryset.mark_all_as_seen(self.session, user)
 
@@ -922,6 +898,5 @@ class NotificationDataAccessLayer:
 
         Args:
             user (Any): The user whose notifications should be cleared.
-
         """
         await queryset.clear_all(self.session, user)

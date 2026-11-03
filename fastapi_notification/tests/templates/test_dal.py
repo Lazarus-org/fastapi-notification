@@ -145,9 +145,7 @@ async def test_get_returns_exact_active_translation():
     )
     session.scalar.return_value = template
 
-    result = await NotificationTemplateDataAccessLayer(session).get(
-        "orders.paid", "en"
-    )
+    result = await NotificationTemplateDataAccessLayer(session).get("orders.paid", "en")
 
     assert result is template
 

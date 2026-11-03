@@ -14,7 +14,6 @@ class Error:
         msg (str): What is wrong.
         hint (Optional[str]): How to fix it.
         id (str): A stable identifier for the class of problem.
-
     """
 
     msg: str
@@ -26,7 +25,6 @@ class Error:
 
         Returns:
             str: The message, identifier and hint if one is present.
-
         """
         rendered = f"({self.id}) {self.msg}"
         if self.hint:
@@ -43,7 +41,6 @@ def validate_boolean_setting(value: Any, config_name: str) -> List[Error]:
 
     Returns:
         List[Error]: The errors found, empty when the value is valid.
-
     """
     errors: List[Error] = []
     if not isinstance(value, bool):
@@ -74,7 +71,6 @@ def validate_list_fields(
 
     Returns:
         List[Error]: The errors found, empty when the value is valid.
-
     """
     errors: List[Error] = []
     if allow_none and fields is None:
@@ -130,7 +126,6 @@ def validate_throttle_rate(rate: Any, setting_name: str) -> List[Error]:
 
     Returns:
         List[Error]: The errors found, empty when the rate is valid.
-
     """
     errors: List[Error] = []
     if not isinstance(rate, str) or "/" not in rate:
@@ -188,7 +183,6 @@ def validate_optional_class_setting(
 
     Returns:
         List[Error]: The errors found, empty when the value is valid.
-
     """
     errors: List[Error] = []
 
@@ -240,7 +234,6 @@ def validate_optional_classes_setting(
 
     Returns:
         List[Error]: The errors found, empty when the value is valid.
-
     """
     errors: List[Error] = []
 
@@ -293,9 +286,9 @@ def validate_permission_class_setting(
 ) -> List[Error]:
     """Validate the no-argument callable class used for extra permissions.
 
-    The package instantiates this class for each request and calls the resulting
-    object with ``(request, user)``. Validate the import and construction
-    contract during router startup instead of failing on the first request.
+    The package instantiates this class for each request and calls the resulting object
+    with ``(request, user)``. Validate the import and construction contract during
+    router startup instead of failing on the first request.
     """
     errors = validate_optional_class_setting(setting_value, setting_name)
     if errors or setting_value is None:

@@ -23,7 +23,6 @@ from .notification_summary import (
 )
 from .user import UserSerializer, build_user_serializer
 
-
 __all__ = [
     "BaseSerializer",
     "GroupSerializer",

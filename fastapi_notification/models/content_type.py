@@ -109,7 +109,6 @@ def natural_key_for_model(model: Type[Any]) -> Tuple[str, str]:
 
     Returns:
         Tuple[str, str]: The app label and lowercased model name.
-
     """
     app_label = getattr(model, "__app_label__", None) or model.__module__.split(".")[0]
     return app_label, model.__name__.lower()
@@ -127,7 +126,6 @@ def register_content_model(model: Type[Any]) -> Type[Any]:
 
     Returns:
         Type[Any]: The same model class, so this can be used as a decorator.
-
     """
     _CONTENT_TYPE_REGISTRY[natural_key_for_model(model)] = model
     return model
@@ -142,19 +140,16 @@ def get_registered_model(app_label: str, model: str) -> Optional[Type[Any]]:
 
     Returns:
         Optional[Type[Any]]: The registered class, or ``None`` when unknown.
-
     """
     return _CONTENT_TYPE_REGISTRY.get((app_label, model))
 
 
 class ContentType(Base):
-    """A lightweight record identifying a model that participates in a generic
-    relation.
+    """A lightweight record identifying a model that participates in a generic relation.
 
     Attributes:
         app_label (str): The package the referenced model belongs to.
         model (str): The lowercased name of the referenced model.
-
     """
 
     __tablename__ = "content_type"
@@ -171,7 +166,6 @@ class ContentType(Base):
 
         Returns:
             str: The ``app_label.model`` representation.
-
         """
         return f"{self.app_label}.{self.model}"
 
@@ -187,7 +181,6 @@ class ContentType(Base):
 
         Returns:
             ContentType: The persisted content type for the model.
-
         """
         app_label, model_name = natural_key_for_model(model)
         register_content_model(model)
@@ -216,7 +209,6 @@ class ContentType(Base):
         Returns:
             Optional[Type[Any]]: The registered class, or ``None`` when the model
             has not been registered in the current process.
-
         """
         return get_registered_model(self.app_label, self.model)
 
@@ -240,7 +232,6 @@ class ContentType(Base):
         Raises:
             TypeError: If the registered model is not mapped or does not have
                 a supported single-column primary key.
-
         """
         model = self.model_class()
         if model is None or object_id is None:

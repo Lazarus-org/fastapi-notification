@@ -4,10 +4,9 @@ from typing import List, Set
 class DisableMethodsMixin:
     """Tracks which router operations are switched off in settings.
 
-    A disabled operation is never registered on the router, so it is absent from
-    the application and from its OpenAPI schema, rather than being registered
-    only to reject every request.
-
+    A disabled operation is never registered on the router, so it is absent from the
+    application and from its OpenAPI schema, rather than being registered only to reject
+    every request.
     """
 
     def disable_methods(self, methods: List[str]) -> None:
@@ -21,7 +20,6 @@ class DisableMethodsMixin:
             To disable listing and retrieval::
 
                 self.disable_methods(["LIST", "RETRIEVE"])
-
         """
         if not hasattr(self, "disabled_methods"):
             self.disabled_methods: Set[str] = set()
@@ -36,6 +34,5 @@ class DisableMethodsMixin:
 
         Returns:
             bool: Whether the operation is enabled.
-
         """
         return method.upper() not in getattr(self, "disabled_methods", set())

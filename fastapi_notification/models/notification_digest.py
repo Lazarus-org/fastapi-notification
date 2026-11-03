@@ -94,21 +94,15 @@ class NotificationDigestBatch(Base):
     scheduled_for: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     period_start: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     period_end: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="pending"
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    claimed_at: Mapped[Optional[datetime]] = mapped_column(
-        UTCDateTime(), nullable=True
-    )
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     available_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utcnow, nullable=False
     )
-    sent_at: Mapped[Optional[datetime]] = mapped_column(
-        UTCDateTime(), nullable=True
-    )
+    sent_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
 
 __all__ = ["NotificationDigestBatch", "NotificationDigestSchedule"]

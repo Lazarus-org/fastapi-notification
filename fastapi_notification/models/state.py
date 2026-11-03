@@ -56,9 +56,7 @@ async def insert_if_absent(
         IntegrityError: If the insert fails for a reason other than a duplicate
             natural key, or if the conflicting row cannot be found afterwards.
     """
-    criteria = [
-        getattr(model, column) == values[column] for column in unique_columns
-    ]
+    criteria = [getattr(model, column) == values[column] for column in unique_columns]
     dialect_statement = _dialect_insert(session, model)
 
     if dialect_statement is not None:

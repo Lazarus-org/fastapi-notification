@@ -14,7 +14,6 @@ def utcnow() -> datetime:
 
     Returns:
         datetime: The current moment in UTC.
-
     """
     return datetime.now(timezone.utc)
 
@@ -22,9 +21,9 @@ def utcnow() -> datetime:
 class UTCDateTime(TypeDecorator):
     """Store timezone-aware datetimes in UTC and restore UTC on every backend.
 
-    SQLite's native ``DateTime(timezone=True)`` storage drops timezone metadata.
-    This type decorator keeps the package's expiration contract consistent by
-    normalizing bind values to UTC and attaching UTC to naive database results.
+    SQLite's native ``DateTime(timezone=True)`` storage drops timezone metadata. This
+    type decorator keeps the package's expiration contract consistent by normalizing
+    bind values to UTC and attaching UTC to naive database results.
     """
 
     impl = DateTime(timezone=True)
@@ -58,10 +57,9 @@ class AuthBase(DeclarativeBase):
 class Base(DeclarativeBase):
     """Declarative base for notification persistence models.
 
-    The optional built-in authentication examples use :class:`AuthBase` and a
-    separate metadata collection, so applications using their own identities do
-    not create or depend on package-owned user and group tables.
-
+    The optional built-in authentication examples use :class:`AuthBase` and a separate
+    metadata collection, so applications using their own identities do not create or
+    depend on package-owned user and group tables.
     """
 
     def to_dict(self) -> Dict[str, Any]:
@@ -69,7 +67,6 @@ class Base(DeclarativeBase):
 
         Returns:
             Dict[str, Any]: A mapping of column name to column value.
-
         """
         return {
             column.name: getattr(self, column.name)

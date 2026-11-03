@@ -29,8 +29,8 @@ def normalize_preference_key(value: str, *, allow_wildcard: bool = False) -> str
 class NotificationPreference(Base):
     """A user's opt-in/opt-out rule for a category and delivery channel.
 
-    ``*`` is supported as a category or channel wildcard. More-specific rules
-    override less-specific rules. Missing rules default to enabled.
+    ``*`` is supported as a category or channel wildcard. More-specific rules override
+    less-specific rules. Missing rules default to enabled.
     """
 
     __tablename__ = "notification_preference"

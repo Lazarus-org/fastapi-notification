@@ -88,6 +88,7 @@ async def _count_state_rows(
     factory: async_sessionmaker, model: Any, notification_id: int
 ) -> int:
     """Count a notification's per-user state records in a fresh session."""
+
     async with factory() as session:
         result = await session.execute(
             select(func.count())

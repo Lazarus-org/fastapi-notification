@@ -59,9 +59,9 @@ class NotificationSchedulingDataAccessLayer:
     """Manage quiet windows, digest schedules and idempotent digest batches.
 
     This class does not run a worker, send messages, or commit transactions.
-    Applications can call ``create_due_batches`` from cron, Celery,
-    APScheduler, or their own worker and then process claimed batches using
-    their preferred delivery provider.
+    Applications can call ``create_due_batches`` from cron, Celery, APScheduler, or
+    their own worker and then process claimed batches using their preferred delivery
+    provider.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -311,9 +311,9 @@ class NotificationSchedulingDataAccessLayer:
     ) -> List[NotificationDigestBatch]:
         """Create idempotent batches for due schedules; does not send them.
 
-        One batch per schedule is created per round. If a scheduler was offline
-        for several periods, repeated rounds catch up missed periods fairly
-        across schedules without allowing one old schedule to starve others.
+        One batch per schedule is created per round. If a scheduler was offline for
+        several periods, repeated rounds catch up missed periods fairly across schedules
+        without allowing one old schedule to starve others.
         """
         now = _require_aware(now or datetime.now(timezone.utc))
         if (
