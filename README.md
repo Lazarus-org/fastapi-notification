@@ -28,13 +28,16 @@ It is built on async SQLAlchemy 2.0 and Pydantic v2, and it is the FastAPI count
 - **Configurable throughout** — serializers, fields, pagination, throttling, filtering and permissions are all driven from settings, and routes you switch off are never registered at all.
 - **Validated at startup** — a misconfiguration raises when the router is built, listing every problem at once, rather than failing on the first request.
 
-## Supported Versions
+## Supported versions
 
-| FastAPI | SQLAlchemy | Python                        |
-|---------|------------|-------------------------------|
-| 0.110+  | 2.0        | 3.9, 3.10, 3.11, 3.12, 3.13   |
+Python 3.11–3.15, FastAPI 0.110+, SQLAlchemy 2.x and Pydantic v2 are supported.
+Python 3.9 and 3.10 are outside the supported range for the 1.0.0 release.
 
-Any database with an async SQLAlchemy driver works; PostgreSQL (`asyncpg`), MySQL (`aiomysql`) and SQLite (`aiosqlite`) are the common choices.
+Database integration targets are SQLite (`aiosqlite`), PostgreSQL 17 (`asyncpg`)
+and MySQL 8.4 LTS with InnoDB (`aiomysql`). Install the asynchronous driver for
+your chosen database separately. Other database engines require application
+validation. Existing MySQL schemas need the
+[identity and temporal precision migration](migrations/README.md).
 
 ## Documentation
 
@@ -608,8 +611,8 @@ This project is licensed under the MIT License — see the [LICENCE](LICENCE) fi
 
 Per-user seen and soft-deletion transitions are idempotent and protected by
 database uniqueness constraints. SQLite and PostgreSQL use atomic conflict-safe
-inserts for single and bulk operations; other SQLAlchemy dialects use savepoint
-fallbacks. The package flushes but never commits the host application's
+inserts for single and bulk operations. MySQL uses native duplicate updates for
+auto-increment integer state keys; other models use savepoint fallbacks. The package flushes but never commits the host application's
 session. The host application owns transaction commit and rollback. See the
 [concurrency guide](docs/concurrency.rst) for details.
 
@@ -665,4 +668,8 @@ The package provides timezone-aware quiet-hour rules and daily/weekly digest
 scheduling primitives. It does not bundle a background worker or delivery
 provider; integrate ``NotificationSchedulingDataAccessLayer`` with your own
 cron, Celery, APScheduler, or application worker. See the
-`Scheduling documentation <https://fastapi-notification.readthedocs.io/en/latest/scheduling.html>`_.
+[scheduling documentation](https://fastapi-notification.readthedocs.io/en/latest/scheduling.html).
+
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development checks and
+[the scheduling guide](docs/scheduling.rst) for DST behavior.

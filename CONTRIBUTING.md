@@ -162,3 +162,22 @@ Here are some additional resources that might be helpful:
 ---
 
 Thank you for your interest in contributing to `fastapi-notification`! We look forward to your contributions.
+
+## Release validation
+
+The supported interpreter matrix is Python 3.11–3.15. Install the locked
+development environment with `poetry sync --with dev` and run `poetry check --lock`
+and `poetry run pytest fastapi_notification/tests`. The unchanged statement
+coverage gate is 100%. The static commands are defined in CI and tox.
+
+Use `poetry sync --with dev,database` for server integration. Both
+`--database-url` and tox's `NOTIFICATION_TEST_DATABASE_URL` must point to a
+disposable database: fixtures create and drop package tables. CI provides
+PostgreSQL 17.5 and MySQL 8.4 service containers with public test credentials.
+See `validation/issue17-1/REPORT.md` for executed results and limitations; hosted
+GitHub Actions is NOT TESTED until an actual hosted run occurs.
+
+The first public release is intended to be 1.0.0. Metadata describes that intended
+stable release; local validation does not publish or authorize publishing it.
+Python 3.9/3.10 exploratory results remain historical evidence and confer no
+support commitment. See `migrations/README.md` before upgrading an existing MySQL schema.

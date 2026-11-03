@@ -21,10 +21,14 @@ the user has soft-deleted.
 
 Bulk ``mark_all_as_seen()`` and ``clear_all()`` operations use an atomic
 ``INSERT ... SELECT ... ON CONFLICT DO NOTHING`` statement on SQLite and
-PostgreSQL. Other SQLAlchemy dialects use savepoints and the same unique
-constraints as the concurrency arbiter. MySQL/MariaDB duplicate recovery uses a
-locking ``SELECT ... FOR UPDATE`` so a concurrent insert is visible even under
-InnoDB's default repeatable-read isolation.
+PostgreSQL. MySQL 8.4 uses ``INSERT ... ON DUPLICATE KEY UPDATE id=id``
+for models with an auto-increment integer primary key. This acquires a duplicate
+row's exclusive lock during insertion and avoids shared-to-exclusive lock
+upgrade deadlocks. Its insertion flag uses cursor ``lastrowid``, since affected
+row counts can include unchanged duplicates with CLIENT_FOUND_ROWS enabled.
+Other models/dialects use savepoints. MySQL-family duplicate lookup uses a
+shared current read so concurrent inserts remain visible at REPEATABLE READ
+without upgrading the portable fallback's shared duplicate-key lock.
 
 Transaction ownership
 ---------------------
@@ -39,8 +43,28 @@ outer transaction.
 Database requirements
 ---------------------
 
-SQLite and PostgreSQL are the native upsert paths. Other SQLAlchemy dialects
+SQLite, PostgreSQL and MySQL 8.4 have native upsert paths. Other models/dialects
 use the savepoint fallback, must support savepoints, and must enforce the
 declared unique constraints. Concurrency guarantees ultimately depend on the
 database correctly enforcing those constraints. Applications should run their
 schema migrations before using these operations.
+
+
+Permanent deletion without database cascades
+-------------------------------------------
+
+Single and bulk permanent deletion explicitly remove recipient, group,
+read-state, soft-deletion and deduplication rows in the caller's transaction.
+This keeps SQLite databases without foreign-key enforcement from retaining
+orphan state when a deleted integer notification identifier is reused.
+The data access layer does not commit these changes; rollback remains owned
+by the host application.
+
+MySQL schema types
+------------------
+
+Opaque user/group identifiers and deduplication scopes/keys use MySQL 8.4's
+``utf8mb4_0900_bin`` NO PAD collation. Case, accents and trailing spaces remain
+significant, matching application identity semantics. UTCDateTime and local
+wall times retain six fractional digits. Existing schemas require the guarded
+reference revision in ``migrations/``; no migration runs automatically.
