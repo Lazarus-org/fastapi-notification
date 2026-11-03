@@ -24,15 +24,18 @@ async def test_create_notification_uses_rendered_template_and_provenance() -> No
         locale="en",
     )
 
-    with patch(
-        "fastapi_notification.repository.manager.templates."
-        "NotificationTemplateDataAccessLayer.render",
-        new=AsyncMock(return_value=rendered),
-    ), patch(
-        "fastapi_notification.repository.manager.notification.queryset."
-        "create_notification",
-        new=AsyncMock(return_value=notification),
-    ) as create:
+    with (
+        patch(
+            "fastapi_notification.repository.manager.templates."
+            "NotificationTemplateDataAccessLayer.render",
+            new=AsyncMock(return_value=rendered),
+        ),
+        patch(
+            "fastapi_notification.repository.manager.notification.queryset."
+            "create_notification",
+            new=AsyncMock(return_value=notification),
+        ) as create,
+    ):
         result = await NotificationDataAccessLayer(session).create_notification(
             actor=object(),
             template_key="orders.payment_received",
