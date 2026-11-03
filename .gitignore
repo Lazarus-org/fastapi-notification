@@ -145,3 +145,20 @@ htmlcov/
 .coverage
 bandit_report.txt
 docs/_build/
+
+# Isolated release validation environments and downloaded interpreters
+.validation-*/
+
+# Generated release-validation output stays local; retain scripts and reports.
+/fastapi-notification-*-source.zip
+/validation/**/*.json
+/validation/**/*.xml
+/validation/**/*.zip
+/validation/**/.coverage*
+/validation/**/baseline.patch
+/validation/**/mysql-process.pid
+/validation/**/SOURCE_ARCHIVE.sha256
+/validation/**/FILES_CHANGED.txt
+/validation/**/git-status.txt
+/validation/**/dist*/
+!/validation/issue17-1/mysql-migration-plan.json
