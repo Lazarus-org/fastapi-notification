@@ -82,6 +82,7 @@ def test_list_rejects_unknown_fields() -> None:
     errors = validate_list_fields(["bogus"], "SETTING", available_fields=["id"])
 
     assert "is invalid" in errors[0].msg
+    assert errors[0].hint is not None
     assert "Valid fields" in errors[0].hint
 
 
@@ -123,6 +124,7 @@ def test_throttle_rate_rejects_an_unknown_time_unit() -> None:
     errors = validate_throttle_rate("10/fortnight", "SETTING")
 
     assert errors[0].id == "fastapi_notification.E008"
+    assert errors[0].hint is not None
     assert "Valid time units" in errors[0].hint
 
 

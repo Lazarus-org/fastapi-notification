@@ -1,5 +1,7 @@
 """Tests for notification category and priority semantics."""
 
+from typing import cast
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -76,7 +78,7 @@ async def test_create_notification_rejects_non_string_category(
     """Category keys cannot be arbitrary objects."""
     with pytest.raises(TypeError, match="category"):
         await dal.create_notification(  # type: ignore[arg-type]
-            verb="invalid category", actor=user, category=123
+            verb="invalid category", actor=user, category=cast(str, 123)
         )
 
 

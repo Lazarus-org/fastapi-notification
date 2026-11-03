@@ -1,5 +1,7 @@
 """Per-user notification delivery preferences."""
 
+from __future__ import annotations
+
 import re
 from datetime import datetime
 
@@ -51,9 +53,10 @@ class NotificationPreference(Base):
 
     def __repr__(self) -> str:
         return (
-            "NotificationPreference(user_id={!r}, category={!r}, channel={!r}, "
-            "enabled={!r})"
-        ).format(self.user_id, self.category, self.channel, self.enabled)
+            f"NotificationPreference(user_id={self.user_id!r}, "
+            f"category={self.category!r}, channel={self.channel!r}, "
+            f"enabled={self.enabled!r})"
+        )
 
 
 __all__ = ["NotificationPreference", "normalize_preference_key"]

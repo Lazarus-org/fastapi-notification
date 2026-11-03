@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, List
 
 import pytest
+from fastapi import Request
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -288,7 +289,7 @@ async def test_ordering_by_a_permitted_but_absent_column_is_ignored(
 
 def test_the_default_filterset_is_reported() -> None:
     """With nothing configured, the packaged filter set is used."""
-    assert get_filterset(None) is NotificationFilter
+    assert get_filterset(Request({"type": "http"})) is NotificationFilter
 
 
 def test_a_configured_filterset_is_reported() -> None:
@@ -299,7 +300,7 @@ def test_a_configured_filterset_is_reported() -> None:
         )
     )
 
-    assert get_filterset(None) is NotificationFilter
+    assert get_filterset(Request({"type": "http"})) is NotificationFilter
 
 
 def test_direct_construction_has_plain_defaults() -> None:

@@ -2,9 +2,11 @@ from types import SimpleNamespace
 from typing import Any, Iterator, List
 
 import pytest
+from sqlalchemy import Select
 from sqlalchemy.dialects import sqlite
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi_notification.constants.qs_types import Groups, OptConditions, Recipients
 from fastapi_notification.models.auth import Group, User
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.repository.queryset import notification as queryset_module
@@ -66,20 +68,48 @@ async def test_bulk_user_operations_include_identity_adapter_groups(
     """Bulk state changes execute SQL using host group memberships."""
     from fastapi_notification.identity import IdentityAdapter
 
-    captured = {}
+    captured: dict[str, object] = {}
 
     class Adapter(IdentityAdapter):
         async def get_user_group_ids(self, session: Any, user: Any) -> List[str]:
             return ["group-17"]
 
     class CapturingQuerySet(NotificationQuerySet):
-        def unseen(self, **kwargs: Any):
-            captured.update(kwargs)
-            return super().unseen(**kwargs)
+        def unseen(
+            self,
+            unseen_by: object,
+            recipients: Recipients = None,
+            groups: Groups = None,
+            display_detail: bool = False,
+            conditions: OptConditions = None,
+        ) -> Select:
+            captured.update(
+                unseen_by=unseen_by,
+                recipients=recipients,
+                groups=groups,
+                display_detail=display_detail,
+                conditions=conditions,
+            )
+            return super().unseen(
+                unseen_by, recipients, groups, display_detail, conditions
+            )
 
-        def seen(self, **kwargs: Any):
-            captured.update(kwargs)
-            return super().seen(**kwargs)
+        def seen(
+            self,
+            seen_by: object,
+            recipients: Recipients = None,
+            groups: Groups = None,
+            display_detail: bool = False,
+            conditions: OptConditions = None,
+        ) -> Select:
+            captured.update(
+                seen_by=seen_by,
+                recipients=recipients,
+                groups=groups,
+                display_detail=display_detail,
+                conditions=conditions,
+            )
+            return super().seen(seen_by, recipients, groups, display_detail, conditions)
 
     monkeypatch.setattr(queryset_module, "get_identity_adapter", lambda: Adapter())
     monkeypatch.setattr(queryset_module, "NotificationQuerySet", CapturingQuerySet)

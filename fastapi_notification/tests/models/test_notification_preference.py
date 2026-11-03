@@ -12,7 +12,7 @@ from fastapi_notification.models.notification_preference import (
 )
 
 
-def test_preference_table_is_registered_with_unique_scope():
+def test_preference_table_is_registered_with_unique_scope() -> None:
     table = Base.metadata.tables["notification_preference"]
     assert table is NotificationPreference.__table__
     assert any(
@@ -21,18 +21,18 @@ def test_preference_table_is_registered_with_unique_scope():
     )
 
 
-def test_preference_key_is_normalized():
+def test_preference_key_is_normalized() -> None:
     assert normalize_preference_key("  Orders.Email ") == "orders.email"
     assert normalize_preference_key("*", allow_wildcard=True) == "*"
 
 
 @pytest.mark.parametrize("value", ["", "bad channel", "../orders", "_orders", "a" * 65])
-def test_invalid_preference_key_is_rejected(value):
+def test_invalid_preference_key_is_rejected(value: str) -> None:
     with pytest.raises(ValueError):
         normalize_preference_key(value, allow_wildcard=True)
 
 
-def test_preference_update_schema_normalizes_keys():
+def test_preference_update_schema_normalizes_keys() -> None:
     payload = NotificationPreferenceUpdate(
         category="Orders", channel="Email", enabled=False
     )
@@ -40,8 +40,13 @@ def test_preference_update_schema_normalizes_keys():
     assert payload.channel == "email"
 
 
-def test_preference_update_schema_rejects_unknown_fields():
+def test_preference_update_schema_rejects_unknown_fields() -> None:
     with pytest.raises(ValueError):
-        NotificationPreferenceUpdate(
-            category="orders", channel="email", enabled=False, user_id="other"
+        NotificationPreferenceUpdate.model_validate(
+            {
+                "category": "orders",
+                "channel": "email",
+                "enabled": False,
+                "user_id": "other",
+            }
         )

@@ -1,5 +1,7 @@
 """Tests for safe localized notification template primitives."""
 
+from typing import Mapping, cast
+
 import pytest
 
 from fastapi_notification.models.notification_template import (
@@ -9,7 +11,7 @@ from fastapi_notification.models.notification_template import (
 from fastapi_notification.utils.templates import render_template, validate_template
 
 
-def test_render_template_substitutes_simple_variables():
+def test_render_template_substitutes_simple_variables() -> None:
     assert (
         render_template(
             "Order {order_number} paid by {customer}",
@@ -19,18 +21,18 @@ def test_render_template_substitutes_simple_variables():
     )
 
 
-def test_render_template_preserves_escaped_braces():
+def test_render_template_preserves_escaped_braces() -> None:
     assert render_template("Use {{order_number}} literally") == (
         "Use {order_number} literally"
     )
 
 
-def test_render_template_rejects_missing_variables():
+def test_render_template_rejects_missing_variables() -> None:
     with pytest.raises(ValueError, match="Missing template variable"):
         render_template("Hello {name}", {})
 
 
-def test_render_template_rejects_none_values():
+def test_render_template_rejects_none_values() -> None:
     with pytest.raises(ValueError, match="cannot be None"):
         render_template("Hello {name}", {"name": None})
 
@@ -39,43 +41,43 @@ def test_render_template_rejects_none_values():
     "template",
     ["{user.name}", "{user[0]}", "{value!r}", "{value:>10}"],
 )
-def test_validate_template_rejects_expressions(template):
+def test_validate_template_rejects_expressions(template: str) -> None:
     with pytest.raises(ValueError):
         validate_template(template)
 
 
-def test_validate_template_rejects_unmatched_braces():
+def test_validate_template_rejects_unmatched_braces() -> None:
     with pytest.raises(ValueError):
         validate_template("Hello {name")
 
 
-def test_normalize_locale_supports_language_region():
+def test_normalize_locale_supports_language_region() -> None:
     assert normalize_locale("fa_ir") == "fa-IR"
     assert normalize_locale("EN-us") == "en-US"
 
 
-def test_normalize_locale_rejects_invalid_value():
+def test_normalize_locale_rejects_invalid_value() -> None:
     with pytest.raises(ValueError):
         normalize_locale("not a locale")
 
 
-def test_normalize_template_key_normalizes_case_and_whitespace():
+def test_normalize_template_key_normalizes_case_and_whitespace() -> None:
     assert normalize_template_key(" Orders.Payment_Received ") == (
         "orders.payment_received"
     )
 
 
-def test_normalize_template_key_rejects_invalid_value():
+def test_normalize_template_key_rejects_invalid_value() -> None:
     with pytest.raises(ValueError):
         normalize_template_key("../unsafe")
 
 
-def test_render_template_rejects_non_mapping_context():
+def test_render_template_rejects_non_mapping_context() -> None:
     with pytest.raises(TypeError, match="must be a mapping"):
-        render_template("Hello {name}", ["Alex"])
+        render_template("Hello {name}", cast(Mapping[str, object], ["Alex"]))
 
 
-def test_template_model_normalizes_fields_on_assignment():
+def test_template_model_normalizes_fields_on_assignment() -> None:
     from fastapi_notification.models.notification_template import NotificationTemplate
 
     template = NotificationTemplate(
@@ -91,7 +93,7 @@ def test_template_model_normalizes_fields_on_assignment():
     assert template.category == "orders"
 
 
-def test_template_model_rejects_unsafe_template_on_assignment():
+def test_template_model_rejects_unsafe_template_on_assignment() -> None:
     from fastapi_notification.models.notification_template import NotificationTemplate
 
     with pytest.raises(ValueError):
@@ -103,24 +105,24 @@ def test_template_model_rejects_unsafe_template_on_assignment():
         )
 
 
-def test_validate_template_rejects_non_string_input():
+def test_validate_template_rejects_non_string_input() -> None:
     with pytest.raises(TypeError, match="must be a string"):
-        validate_template(None)
+        validate_template(cast(str, None))
 
 
-def test_normalizers_reject_non_string_values():
+def test_normalizers_reject_non_string_values() -> None:
     from fastapi_notification.models.notification_template import (
         normalize_locale,
         normalize_template_key,
     )
 
     with pytest.raises(TypeError):
-        normalize_locale(None)
+        normalize_locale(cast(str, None))
     with pytest.raises(TypeError):
-        normalize_template_key(None)
+        normalize_template_key(cast(str, None))
 
 
-def test_template_model_rejects_verb_longer_than_notification_column():
+def test_template_model_rejects_verb_longer_than_notification_column() -> None:
     from fastapi_notification.models.notification_template import NotificationTemplate
 
     with pytest.raises(ValueError, match="127 characters"):

@@ -4,7 +4,9 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Any
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi_notification.models.auth import User
 from fastapi_notification.models.notification_digest import (
     NotificationDigestBatch,
     NotificationDigestSchedule,
@@ -15,7 +17,9 @@ from fastapi_notification.repository.manager.scheduling import (
 )
 
 
-async def test_quiet_hours_support_overnight_windows(session, user):
+async def test_quiet_hours_support_overnight_windows(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     await dal.set_quiet_hours(
         user,
@@ -54,7 +58,9 @@ async def test_quiet_hours_support_overnight_windows(session, user):
     )
 
 
-async def test_quiet_hours_return_next_allowed_instant(session, user):
+async def test_quiet_hours_return_next_allowed_instant(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     await dal.set_quiet_hours(
         user, channel="*", start_time=time(22), end_time=time(7), timezone_name="UTC"
@@ -65,7 +71,9 @@ async def test_quiet_hours_return_next_allowed_instant(session, user):
     assert result == datetime(2026, 11, 3, 7, tzinfo=timezone.utc)
 
 
-async def test_quiet_hours_are_user_scoped(session, user, other_user):
+async def test_quiet_hours_are_user_scoped(
+    session: AsyncSession, user: User, other_user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     await dal.set_quiet_hours(
         user, start_time=time(22), end_time=time(7), timezone_name="UTC"
@@ -74,7 +82,9 @@ async def test_quiet_hours_are_user_scoped(session, user, other_user):
     assert await dal.list_quiet_hours(other_user) == []
 
 
-async def test_digest_schedule_creates_due_idempotent_batch(session, user):
+async def test_digest_schedule_creates_due_idempotent_batch(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     now = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
     schedule = await dal.set_digest_schedule(
@@ -89,7 +99,9 @@ async def test_digest_schedule_creates_due_idempotent_batch(session, user):
     assert await dal.create_due_batches(now=due) == []
 
 
-async def test_digest_batch_claim_and_complete_are_state_guarded(session, user):
+async def test_digest_batch_claim_and_complete_are_state_guarded(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     now = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
     schedule = await dal.set_digest_schedule(
@@ -103,7 +115,9 @@ async def test_digest_batch_claim_and_complete_are_state_guarded(session, user):
     assert await dal.mark_batch_sent(batch.id) is False
 
 
-async def test_failed_digest_batch_can_be_retried(session, user):
+async def test_failed_digest_batch_can_be_retried(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     now = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
     schedule = await dal.set_digest_schedule(
@@ -118,13 +132,15 @@ async def test_failed_digest_batch_can_be_retried(session, user):
     assert retry is not None and retry.attempts == 2
 
 
-def test_scheduling_models_are_registered():
+def test_scheduling_models_are_registered() -> None:
     assert NotificationQuietHours.__tablename__ == "notification_quiet_hours"
     assert NotificationDigestSchedule.__tablename__ == "notification_digest_schedule"
     assert NotificationDigestBatch.__tablename__ == "notification_digest_batch"
 
 
-async def test_disabled_exact_quiet_rule_overrides_enabled_wildcard(session, user):
+async def test_disabled_exact_quiet_rule_overrides_enabled_wildcard(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     await dal.set_quiet_hours(
         user,
@@ -150,7 +166,9 @@ async def test_disabled_exact_quiet_rule_overrides_enabled_wildcard(session, use
     )
 
 
-async def test_schedule_removal_preserves_created_digest_batch(session, user):
+async def test_schedule_removal_preserves_created_digest_batch(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     now = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
     schedule = await dal.set_digest_schedule(
@@ -164,7 +182,9 @@ async def test_schedule_removal_preserves_created_digest_batch(session, user):
     assert persisted.schedule_id is None
 
 
-async def test_deferred_batch_is_not_claimable_until_available(session, user):
+async def test_deferred_batch_is_not_claimable_until_available(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     now = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
     schedule = await dal.set_digest_schedule(
@@ -181,7 +201,9 @@ async def test_deferred_batch_is_not_claimable_until_available(session, user):
     assert await dal.claim_batch(batch.id, now=release_at) is not None
 
 
-async def test_abandoned_processing_batch_can_be_reclaimed(session, user):
+async def test_abandoned_processing_batch_can_be_reclaimed(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     now = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
     schedule = await dal.set_digest_schedule(
@@ -196,7 +218,9 @@ async def test_abandoned_processing_batch_can_be_reclaimed(session, user):
     assert reclaimed.attempts == 2
 
 
-async def test_quiet_hours_reset_is_idempotent(session, user):
+async def test_quiet_hours_reset_is_idempotent(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     await dal.set_quiet_hours(
         user, channel="push", start_time=time(22), end_time=time(7), timezone_name="UTC"
@@ -205,7 +229,9 @@ async def test_quiet_hours_reset_is_idempotent(session, user):
     assert await dal.reset_quiet_hours(user, channel="push") is False
 
 
-async def test_digest_schedule_reset_preserves_batches(session, user):
+async def test_digest_schedule_reset_preserves_batches(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     now = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
     schedule = await dal.set_digest_schedule(
@@ -217,7 +243,9 @@ async def test_digest_schedule_reset_preserves_batches(session, user):
     assert await session.get(NotificationDigestSchedule, schedule.id) is None
 
 
-async def test_due_batch_creation_catches_up_missed_daily_periods(session, user):
+async def test_due_batch_creation_catches_up_missed_daily_periods(
+    session: AsyncSession, user: User
+) -> None:
     dal = NotificationSchedulingDataAccessLayer(session)
     start = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
     schedule = await dal.set_digest_schedule(

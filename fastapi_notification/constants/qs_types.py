@@ -1,4 +1,15 @@
-from typing import Any, Dict, List, Optional, Sequence, Union
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Sequence, Union
+
+if TYPE_CHECKING:
+
+    class ContentObject(Protocol):
+        @property
+        def id(self) -> object: ...
+
+else:
+    ContentObject = object
 
 # Identity objects belong to the host application. The package only relies on
 # the configured IdentityAdapter to extract their identifiers.

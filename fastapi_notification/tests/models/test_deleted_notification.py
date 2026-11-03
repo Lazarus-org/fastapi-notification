@@ -61,8 +61,8 @@ async def test_str_uses_loaded_relationships(
     deleted = await DeletedNotification.create(session, notification, user)
     await session.commit()
 
-    deleted.user = user
-    deleted.notification = notification
+    setattr(deleted, "user", user)
+    setattr(deleted, "notification", notification)
 
     assert "deleted by ann" in str(deleted)
 

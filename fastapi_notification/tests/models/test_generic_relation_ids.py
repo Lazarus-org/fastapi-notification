@@ -225,11 +225,18 @@ async def test_generic_relations_round_trip_integer_uuid_and_string_ids(
     assert reloaded is not None
     await reloaded.resolve_generic_relations(session)
 
+    assert reloaded.actor is not None
+    assert user is not None
     assert reloaded.actor.id == user.id
+    assert reloaded.actor is not None
     assert isinstance(reloaded.actor.id, int)
+    assert reloaded.target is not None
     assert reloaded.target.id == uuid_identifier
+    assert reloaded.target is not None
     assert isinstance(reloaded.target.id, UUID)
+    assert reloaded.action_object is not None
     assert reloaded.action_object.id == "comment:alpha/2026"
+    assert reloaded.action_object is not None
     assert isinstance(reloaded.action_object.id, str)
 
 

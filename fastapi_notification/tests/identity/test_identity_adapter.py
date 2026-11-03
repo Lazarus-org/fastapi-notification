@@ -1,9 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, List, Mapping, Sequence
 from uuid import UUID
 
 import pytest
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import String, create_engine, inspect
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Executable
 
 from fastapi_notification.identity import (
     IdentityAdapter,
@@ -17,6 +19,7 @@ from fastapi_notification.models.deleted_notification import DeletedNotification
 from fastapi_notification.models.notification_recipient import NotificationRecipient
 from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.settings.conf import configure
+from fastapi_notification.tests.typing_helpers import session_double
 
 pytestmark = [pytest.mark.utils]
 
@@ -69,7 +72,9 @@ async def test_adapter_supports_custom_user_and_group_attributes() -> None:
 
     assert adapter.get_user_id(user) == str(user.uuid)
     assert adapter.get_group_id(group) == "moderators"
-    assert await adapter.get_user_group_ids(None, user) == ["moderators"]
+    assert await adapter.get_user_group_ids(session_double(None), user) == [
+        "moderators"
+    ]
     assert adapter.is_staff(user) is True
     assert adapter.is_superuser(user) is False
 
@@ -79,8 +84,8 @@ async def test_base_adapter_resolves_ids_without_auth_table_queries() -> None:
     """The generic adapter represents IDs without querying built-in auth tables."""
     adapter = IdentityAdapter()
 
-    users = await adapter.resolve_users(None, ["user-1"])
-    groups = await adapter.resolve_groups(None, ["group-1"])
+    users = await adapter.resolve_users(session_double(None), ["user-1"])
+    groups = await adapter.resolve_groups(session_double(None), ["group-1"])
 
     assert users == {"user-1": IdentityReference("user-1", "user-1", "user-1")}
     assert groups == {"group-1": IdentityReference("group-1", "group-1", "group-1")}
@@ -110,6 +115,7 @@ def test_identity_association_columns_are_opaque_and_unconstrained() -> None:
         (notification_group, "group_id"),
     ):
         column = table.c[column_name]
+        assert isinstance(column.type, String)
         assert column.type.length == 255
         assert not column.foreign_keys
 
@@ -135,50 +141,50 @@ def test_core_metadata_creates_without_authentication_tables() -> None:
 class FakeScalarResult:
     """A minimal SQLAlchemy result wrapper for adapter unit tests."""
 
-    def __init__(self, rows):
-        self.rows = rows
+    def __init__(self, rows: Sequence[object]) -> None:
+        self.rows = list(rows)
 
-    def scalars(self):
+    def scalars(self) -> "FakeScalarResult":
         return self
 
-    def all(self):
+    def all(self) -> List[object]:
         return self.rows
 
 
 class FakeExecutionResult:
     """A result exposing the row and scalar interfaces used by the adapter."""
 
-    def __init__(self, rows):
-        self.rows = rows
+    def __init__(self, rows: Sequence[object]) -> None:
+        self.rows = list(rows)
 
-    def all(self):
+    def all(self) -> List[object]:
         return self.rows
 
-    def scalars(self):
+    def scalars(self) -> FakeScalarResult:
         return FakeScalarResult(self.rows)
 
 
 class FakeSession:
     """Return queued result sets for successive async execute calls."""
 
-    def __init__(self, result_sets):
+    def __init__(self, result_sets: Sequence[Sequence[object]]) -> None:
         self.result_sets = list(result_sets)
-        self.statements = []
+        self.statements: List[Executable] = []
 
-    async def execute(self, statement):
+    async def execute(self, statement: Executable) -> FakeExecutionResult:
         self.statements.append(statement)
         return FakeExecutionResult(self.result_sets.pop(0))
 
 
 @pytest.mark.asyncio
-async def test_adapter_returns_empty_groups_when_user_has_no_group_attribute():
+async def test_adapter_returns_empty_groups_when_user_has_no_group_attribute() -> None:
     """A host user without a group property belongs to no notification groups."""
     adapter = IdentityAdapter()
 
-    assert await adapter.get_user_group_ids(None, object()) == []
+    assert await adapter.get_user_group_ids(session_double(None), object()) == []
 
 
-def test_adapter_rejects_missing_user_and_group_identifiers():
+def test_adapter_rejects_missing_user_and_group_identifiers() -> None:
     """Identity models must expose the configured stable identifier."""
     adapter = IdentityAdapter()
 
@@ -188,7 +194,7 @@ def test_adapter_rejects_missing_user_and_group_identifiers():
         adapter.get_group_id(object())
 
 
-def test_normalize_identity_id_supports_objects_and_rejects_nul():
+def test_normalize_identity_id_supports_objects_and_rejects_nul() -> None:
     """Identity-like objects and invalid strings are handled explicitly."""
 
     class Identity:
@@ -200,7 +206,7 @@ def test_normalize_identity_id_supports_objects_and_rejects_nul():
 
 
 @pytest.mark.asyncio
-async def test_built_in_adapter_resolves_optional_auth_models():
+async def test_built_in_adapter_resolves_optional_auth_models() -> None:
     """The optional adapter resolves the example User and Group records."""
     from fastapi_notification.identity import BuiltInIdentityAdapter
     from fastapi_notification.models.auth import Group, User
@@ -209,17 +215,17 @@ async def test_built_in_adapter_resolves_optional_auth_models():
     group = Group(id=9, name="nine")
     adapter = BuiltInIdentityAdapter()
 
-    users = await adapter.resolve_users(FakeSession([[user]]), ["7"])
-    groups = await adapter.resolve_groups(FakeSession([[group]]), ["9"])
+    users = await adapter.resolve_users(session_double(FakeSession([[user]])), ["7"])
+    groups = await adapter.resolve_groups(session_double(FakeSession([[group]])), ["9"])
 
     assert users == {"7": user}
     assert groups == {"9": group}
-    assert await adapter.resolve_users(FakeSession([]), []) == {}
-    assert await adapter.resolve_groups(FakeSession([]), []) == {}
+    assert await adapter.resolve_users(session_double(FakeSession([])), []) == {}
+    assert await adapter.resolve_groups(session_double(FakeSession([])), []) == {}
 
 
 @pytest.mark.asyncio
-async def test_hydrate_notification_identities_batches_all_associations():
+async def test_hydrate_notification_identities_batches_all_associations() -> None:
     """Recipient, group, and seen-by identities are resolved in three batches."""
     from fastapi_notification.identity import hydrate_notification_identities
     from fastapi_notification.models.notification import Notification
@@ -233,7 +239,7 @@ async def test_hydrate_notification_identities_batches_all_associations():
         ]
     )
 
-    await hydrate_notification_identities(session, [notification])
+    await hydrate_notification_identities(session_double(session), [notification])
 
     assert len(session.statements) == 3
     assert notification.recipient[0].id == "recipient-1"
@@ -242,7 +248,7 @@ async def test_hydrate_notification_identities_batches_all_associations():
 
 
 @pytest.mark.asyncio
-async def test_hydrate_notification_identities_preserves_unresolved_ids():
+async def test_hydrate_notification_identities_preserves_unresolved_ids() -> None:
     """Unresolvable host records remain visible as ID-only references."""
     from fastapi_notification.identity import (
         IdentityAdapter,
@@ -251,49 +257,53 @@ async def test_hydrate_notification_identities_preserves_unresolved_ids():
     from fastapi_notification.models.notification import Notification
 
     class PartialAdapter(IdentityAdapter):
-        async def resolve_users(self, session, user_ids):
+        async def resolve_users(
+            self, session: AsyncSession, user_ids: Sequence[str]
+        ) -> Mapping[str, IdentityReference]:
             return {}
 
-        async def resolve_groups(self, session, group_ids):
+        async def resolve_groups(
+            self, session: AsyncSession, group_ids: Sequence[str]
+        ) -> Mapping[str, IdentityReference]:
             return {}
 
     configure(IDENTITY_ADAPTER=PartialAdapter)
     notification = Notification(id=22)
     session = FakeSession([[(22, "missing-user")], [(22, "missing-group")], []])
 
-    await hydrate_notification_identities(session, [notification])
+    await hydrate_notification_identities(session_double(session), [notification])
 
     assert notification.recipient[0].id == "missing-user"
     assert notification.group[0].id == "missing-group"
 
 
 @pytest.mark.asyncio
-async def test_hydrate_notification_identities_skips_empty_notification_lists():
+async def test_hydrate_notification_identities_skips_empty_notification_lists() -> None:
     """An empty list does not execute association queries."""
     from fastapi_notification.identity import hydrate_notification_identities
 
     session = FakeSession([])
 
-    await hydrate_notification_identities(session, [])
+    await hydrate_notification_identities(session_double(session), [])
 
     assert session.statements == []
 
 
 @pytest.mark.asyncio
-async def test_notification_load_identities_delegates_to_adapter():
+async def test_notification_load_identities_delegates_to_adapter() -> None:
     """The model exposes an explicit loader for direct SQLAlchemy queries."""
     from fastapi_notification.models.notification import Notification
 
     notification = Notification(id=23)
     session = FakeSession([[], [], []])
 
-    result = await notification.load_identities(session)
+    result = await notification.load_identities(session_double(session))
 
     assert result is notification
     assert len(session.statements) == 3
 
 
-def test_resolved_identity_index_accepts_mapping_and_sequence_results():
+def test_resolved_identity_index_accepts_mapping_and_sequence_results() -> None:
     """Adapter resolution results are normalized regardless of their shape."""
     from fastapi_notification.identity import index_resolved_identities
 
@@ -308,7 +318,7 @@ def test_resolved_identity_index_accepts_mapping_and_sequence_results():
     }
 
 
-def test_identity_adapter_instance_is_cached_for_repeated_lookups():
+def test_identity_adapter_instance_is_cached_for_repeated_lookups() -> None:
     """The configured adapter is instantiated once and reused."""
     configure(IDENTITY_ADAPTER=ExternalIdentityAdapter)
 
@@ -318,14 +328,14 @@ def test_identity_adapter_instance_is_cached_for_repeated_lookups():
     assert first is second
 
 
-def test_identity_reference_string_uses_its_display_identifier():
+def test_identity_reference_string_uses_its_display_identifier() -> None:
     """Identity references have a useful display representation."""
     reference = IdentityReference("user-1", "user-1", "user-1")
 
     assert str(reference) == "user-1"
 
 
-def test_adapter_accepts_raw_scalar_user_and_group_ids():
+def test_adapter_accepts_raw_scalar_user_and_group_ids() -> None:
     """Raw integer and UUID values can be used without model instances."""
     from uuid import UUID
 
@@ -336,7 +346,7 @@ def test_adapter_accepts_raw_scalar_user_and_group_ids():
     assert adapter.get_group_id(identifier) == str(identifier)
 
 
-def test_configured_adapter_instance_is_supported():
+def test_configured_adapter_instance_is_supported() -> None:
     """A prebuilt adapter instance can be supplied directly."""
     adapter = ExternalIdentityAdapter()
     configure(IDENTITY_ADAPTER=adapter)
@@ -344,7 +354,7 @@ def test_configured_adapter_instance_is_supported():
     assert get_identity_adapter() is adapter
 
 
-def test_get_identity_adapter_rejects_an_incomplete_instance():
+def test_get_identity_adapter_rejects_an_incomplete_instance() -> None:
     """The adapter contract is checked before an instance is returned."""
     configure(IDENTITY_ADAPTER=object())
 
@@ -352,7 +362,7 @@ def test_get_identity_adapter_rejects_an_incomplete_instance():
         get_identity_adapter()
 
 
-def test_queryset_identity_helpers_normalize_external_ids():
+def test_queryset_identity_helpers_normalize_external_ids() -> None:
     """Recipient and group query helpers use the configured adapter."""
     from fastapi_notification.repository.queryset.notification import _ids
 
@@ -365,7 +375,7 @@ def test_queryset_identity_helpers_normalize_external_ids():
     assert _ids("user-1", "user") == ["user-1"]
 
 
-def test_notification_filter_normalizes_external_user_and_group_ids():
+def test_notification_filter_normalizes_external_user_and_group_ids() -> None:
     """Filter parameters are compared using normalized opaque identity IDs."""
     from fastapi_notification.api.filters.notification_filter import NotificationFilter
 
@@ -394,21 +404,23 @@ def test_notification_filter_normalizes_external_user_and_group_ids():
 
 
 @pytest.mark.asyncio
-async def test_snapshot_membership_requires_explicit_adapter_support():
+async def test_snapshot_membership_requires_explicit_adapter_support() -> None:
     adapter = IdentityAdapter()
     with pytest.raises(NotImplementedError, match="get_group_user_ids"):
-        await adapter.get_group_user_ids(None, "engineering")
+        await adapter.get_group_user_ids(session_double(None), "engineering")
 
 
 @pytest.mark.asyncio
-async def test_custom_adapter_can_resolve_snapshot_group_members():
+async def test_custom_adapter_can_resolve_snapshot_group_members() -> None:
     class SnapshotAdapter(IdentityAdapter):
-        async def get_group_user_ids(self, session, group):
+        async def get_group_user_ids(
+            self, session: AsyncSession, group: object
+        ) -> Sequence[str]:
             assert session is None
             return ["user-1", "user-2"]
 
     adapter = SnapshotAdapter()
-    members = await adapter.get_group_user_ids(None, "engineering")
+    members = await adapter.get_group_user_ids(session_double(None), "engineering")
     assert members == ["user-1", "user-2"]
 
 
@@ -426,4 +438,6 @@ async def test_group_resolution_loads_unloaded_relationship(
 
 @pytest.mark.asyncio
 async def test_group_resolution_accepts_identity_without_groups() -> None:
-    assert await IdentityAdapter().get_user_group_ids(None, object()) == []
+    assert (
+        await IdentityAdapter().get_user_group_ids(session_double(None), object()) == []
+    )

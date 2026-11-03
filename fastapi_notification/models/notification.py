@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List, Optional
 
@@ -17,6 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
+from fastapi_notification.constants.qs_types import ContentObject
 from fastapi_notification.identity import (
     get_identity_adapter,
     hydrate_notification_identities,
@@ -41,6 +44,7 @@ from fastapi_notification.models.permissions.notification_permission import (
 from fastapi_notification.models.state import insert_if_absent
 from fastapi_notification.utils.loading import ensure_loaded
 from fastapi_notification.utils.naturaltime import naturaltime
+from fastapi_notification.utils.sqlalchemy import execute_dml
 
 
 @register_content_model
@@ -275,9 +279,10 @@ class Notification(Base):
     #: Resolved generic relation objects. These are populated when the
     #: notification is created, and by :meth:`resolve_generic_relations` when it
     #: is loaded back from the database.
-    actor: ClassVar[Any] = None
-    target: ClassVar[Any] = None
-    action_object: ClassVar[Any] = None
+    __allow_unmapped__ = True
+    actor: Optional[ContentObject] = None
+    target: Optional[ContentObject] = None
+    action_object: Optional[ContentObject] = None
 
     @validates("expires_at")
     def _validate_expires_at(
@@ -499,12 +504,13 @@ class Notification(Base):
                 )
             ),
         )
-        result = await session.execute(
+        result = await execute_dml(
+            session,
             delete(NotificationSeen).where(
                 NotificationSeen.notification_id == self.id,
                 NotificationSeen.user_id == user_id,
                 NotificationSeen.notification_id.in_(still_visible),
-            )
+            ),
         )
         removed = (result.rowcount or 0) > 0
 

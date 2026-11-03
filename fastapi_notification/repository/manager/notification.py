@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, overload
 
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +27,7 @@ from fastapi_notification.models.helper.enums import (
     normalize_priority,
 )
 from fastapi_notification.models.notification import Notification
+from fastapi_notification.repository.manager.read import NotificationReadOperations
 from fastapi_notification.repository.queryset import notification as queryset
 from fastapi_notification.repository.queryset.deduplication import (
     claim_deduplication_key,
@@ -34,7 +35,55 @@ from fastapi_notification.repository.queryset.deduplication import (
 
 
 # pylint: disable=too-many-arguments,too-many-public-methods
-class NotificationDataAccessLayer:
+def _validate_deduplication(
+    deduplication_key: Optional[str],
+    deduplication_scope: str,
+    deduplication_key_expires_at: Optional[datetime],
+) -> Optional[datetime]:
+    """Validate a scoped event key and normalize its optional retention deadline."""
+    if deduplication_key is not None:
+        if not isinstance(deduplication_key, str):
+            raise TypeError("deduplication_key must be a string or None.")
+        if (
+            not deduplication_key.strip()
+            or len(deduplication_key) > 255
+            or "\x00" in deduplication_key
+        ):
+            raise ValueError(
+                "deduplication_key must contain 1 to 255 non-NUL characters."
+            )
+        if not isinstance(deduplication_scope, str):
+            raise TypeError("deduplication_scope must be a string.")
+        if (
+            not deduplication_scope.strip()
+            or len(deduplication_scope) > 255
+            or "\x00" in deduplication_scope
+        ):
+            raise ValueError(
+                "deduplication_scope must contain 1 to 255 non-NUL characters."
+            )
+        if deduplication_key_expires_at is not None:
+            if not isinstance(deduplication_key_expires_at, datetime):
+                raise TypeError(
+                    "deduplication_key_expires_at must be a datetime or None."
+                )
+            if (
+                deduplication_key_expires_at.tzinfo is None
+                or deduplication_key_expires_at.utcoffset() is None
+            ):
+                raise ValueError("deduplication_key_expires_at must be timezone-aware.")
+            deduplication_key_expires_at = deduplication_key_expires_at.astimezone(
+                timezone.utc
+            )
+            if deduplication_key_expires_at <= datetime.now(timezone.utc):
+                raise ValueError("deduplication_key_expires_at must be in the future.")
+    elif deduplication_key_expires_at is not None:
+        raise ValueError("deduplication_key_expires_at requires deduplication_key.")
+
+    return deduplication_key_expires_at
+
+
+class NotificationDataAccessLayer(NotificationReadOperations):
     """Data Access Layer (DAL) for managing notifications.
 
     Bound to a single :class:`AsyncSession`, this class provides methods for
@@ -67,450 +116,41 @@ class NotificationDataAccessLayer:
         self.session = session
         self.query_set = queryset.NotificationQuerySet()
 
-    def get_queryset(self) -> queryset.NotificationQuerySet:
-        """Return the statement builder backing this data access layer.
+    async def _snapshot_audience(
+        self, recipients: Recipients, groups: Groups, group_audience_strategy: str
+    ) -> Tuple[Recipients, Groups]:
+        """Resolve a snapshot once, preserving dynamic audiences unchanged."""
+        if group_audience_strategy not in {"dynamic", "snapshot"}:
+            raise ValueError("group_audience_strategy must be 'dynamic' or 'snapshot'.")
 
-        Returns:
-            NotificationQuerySet: The statement builder.
-        """
-        return self.query_set
-
-    async def _execute(
-        self, statement: Select, display_detail: bool
-    ) -> Union[List[Notification], Rows]:
-        """Run a statement and return its rows.
-
-        Args:
-            statement (Select): The statement to execute.
-            display_detail (bool): Whether whole notifications were selected.
-
-        Returns:
-            Union[List[Notification], Rows]: The resulting rows.
-        """
-        rows = await queryset.fetch(self.session, statement, display_detail)
-        if display_detail:
-            await hydrate_notification_identities(self.session, rows)
-        return rows
-
-    # ------------------------------------------------------------------
-    # Statement builders
-    # ------------------------------------------------------------------
-
-    def all_notifications_statement(
-        self,
-        recipients: Recipients = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-    ) -> Select:
-        """Build the statement returning every notification.
-
-        Args:
-            recipients (Recipients): The recipients of the notifications.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are selected.
-
-        Returns:
-            Select: The statement.
-        """
-        return self.query_set.all_notifications(recipients, groups, display_detail)
-
-    def sent_statement(
-        self,
-        recipients: Recipients = None,
-        exclude_deleted_by: Recipient = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-        conditions: OptConditions = None,
-        include_expired: bool = False,
-    ) -> Select:
-        """Build the statement returning sent notifications.
-
-        Args:
-            recipients (Recipients): The recipients of the notifications.
-            exclude_deleted_by (Recipient): Exclude notifications deleted by
-                this user.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are selected.
-            conditions (OptConditions): Extra conditions to apply.
-            include_expired (bool): Include expired rows for historical queries.
-
-        Returns:
-            Select: The statement.
-        """
-        return self.query_set.sent(
-            recipients,
-            exclude_deleted_by,
-            groups,
-            display_detail,
-            conditions,
-            include_expired,
-        )
-
-    def unsent_statement(
-        self,
-        recipients: Recipients = None,
-        exclude_deleted_by: Recipient = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-        conditions: OptConditions = None,
-        include_expired: bool = False,
-    ) -> Select:
-        """Build the statement returning unsent notifications.
-
-        Args:
-            recipients (Recipients): The recipients of the notifications.
-            exclude_deleted_by (Recipient): Exclude notifications deleted by
-                this user.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are selected.
-            conditions (OptConditions): Extra conditions to apply.
-            include_expired (bool): Include expired rows for historical queries.
-
-        Returns:
-            Select: The statement.
-        """
-        return self.query_set.unsent(
-            recipients,
-            exclude_deleted_by,
-            groups,
-            display_detail,
-            conditions,
-            include_expired,
-        )
-
-    def seen_statement(
-        self,
-        seen_by: Any,
-        recipients: Recipients = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-        conditions: OptConditions = None,
-    ) -> Select:
-        """Build the statement returning notifications a user has seen.
-
-        Args:
-            seen_by (Any): The user who has seen the notifications.
-            recipients (Recipients): The recipients of the notifications.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are selected.
-            conditions (OptConditions): Extra conditions to apply.
-
-        Returns:
-            Select: The statement.
-        """
-        return self.query_set.seen(
-            seen_by, recipients, groups, display_detail, conditions
-        )
-
-    def unseen_statement(
-        self,
-        unseen_by: Any,
-        recipients: Recipients = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-        conditions: OptConditions = None,
-    ) -> Select:
-        """Build the statement returning notifications a user has not seen.
-
-        Args:
-            unseen_by (Any): The user who has not seen the notifications.
-            recipients (Recipients): The recipients of the notifications.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are selected.
-            conditions (OptConditions): Extra conditions to apply.
-
-        Returns:
-            Select: The statement.
-        """
-        return self.query_set.unseen(
-            unseen_by, recipients, groups, display_detail, conditions
-        )
-
-    def deleted_statement(
-        self, deleted_by: Recipient = None, display_detail: bool = True
-    ) -> Select:
-        """Build the statement returning soft deleted notifications.
-
-        Args:
-            deleted_by (Recipient): Restrict to deletions by this user.
-            display_detail (bool): Whether whole notifications are selected.
-
-        Returns:
-            Select: The statement.
-        """
-        return self.query_set.deleted(deleted_by, display_detail)
-
-    # ------------------------------------------------------------------
-    # Reads
-    # ------------------------------------------------------------------
-
-    async def all_notifications(
-        self,
-        recipients: Recipients = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-    ) -> Union[List[Notification], Rows]:
-        """Return every notification, whether sent, seen or soft deleted.
-
-        This is the unfiltered view. Unlike :meth:`sent`, :meth:`unsent`,
-        :meth:`seen` and :meth:`unseen`, it does not exclude notifications a
-        user has cleared, so it reports what is actually stored.
-
-        Args:
-            recipients (Recipients): The recipients of the notifications.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are returned.
-
-        Returns:
-            Union[List[Notification], Rows]: The matching notifications.
-        """
-        return await self._execute(
-            self.all_notifications_statement(recipients, groups, display_detail),
-            display_detail,
-        )
-
-    async def sent(
-        self,
-        recipients: Recipients = None,
-        exclude_deleted_by: Recipient = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-        conditions: OptConditions = None,
-        include_expired: bool = False,
-    ) -> Union[List[Notification], Rows]:
-        """Return all sent notifications.
-
-        Args:
-            recipients (Recipients): The recipients of the notifications.
-            exclude_deleted_by (Recipient): Exclude notifications deleted by
-                this user.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are returned.
-            conditions (OptConditions): Extra conditions to apply.
-            include_expired (bool): Include expired rows for historical inspection.
-
-        Returns:
-            Union[List[Notification], Rows]: The matching notifications.
-        """
-        return await self._execute(
-            self.sent_statement(
-                recipients,
-                exclude_deleted_by,
-                groups,
-                display_detail,
-                conditions,
-                include_expired,
-            ),
-            display_detail,
-        )
-
-    async def unsent(
-        self,
-        recipients: Recipients = None,
-        exclude_deleted_by: Recipient = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-        conditions: OptConditions = None,
-        include_expired: bool = False,
-    ) -> Union[List[Notification], Rows]:
-        """Return all unsent notifications.
-
-        Args:
-            recipients (Recipients): The recipients of the notifications.
-            exclude_deleted_by (Recipient): Exclude notifications deleted by
-                this user.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are returned.
-            conditions (OptConditions): Extra conditions to apply.
-            include_expired (bool): Include expired rows for historical inspection.
-
-        Returns:
-            Union[List[Notification], Rows]: The matching notifications.
-        """
-        return await self._execute(
-            self.unsent_statement(
-                recipients,
-                exclude_deleted_by,
-                groups,
-                display_detail,
-                conditions,
-                include_expired,
-            ),
-            display_detail,
-        )
-
-    async def seen(
-        self,
-        seen_by: Any,
-        recipients: Recipients = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-        conditions: OptConditions = None,
-    ) -> Union[List[Notification], Rows]:
-        """Return all notifications the given user has seen.
-
-        Args:
-            seen_by (Any): The user who has seen the notifications.
-            recipients (Recipients): The recipients of the notifications.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are returned.
-            conditions (OptConditions): Extra conditions to apply.
-
-        Returns:
-            Union[List[Notification], Rows]: The matching notifications.
-        """
-        return await self._execute(
-            self.seen_statement(
-                seen_by, recipients, groups, display_detail, conditions
-            ),
-            display_detail,
-        )
-
-    async def unseen(
-        self,
-        unseen_by: Any,
-        recipients: Recipients = None,
-        groups: Groups = None,
-        display_detail: bool = False,
-        conditions: OptConditions = None,
-    ) -> Union[List[Notification], Rows]:
-        """Return all notifications the given user has not seen.
-
-        Args:
-            unseen_by (Any): The user who has not seen the notifications.
-            recipients (Recipients): The recipients of the notifications.
-            groups (Groups): The groups of the notifications.
-            display_detail (bool): Whether whole notifications are returned.
-            conditions (OptConditions): Extra conditions to apply.
-
-        Returns:
-            Union[List[Notification], Rows]: The matching notifications.
-        """
-        return await self._execute(
-            self.unseen_statement(
-                unseen_by, recipients, groups, display_detail, conditions
-            ),
-            display_detail,
-        )
-
-    async def deleted(
-        self, deleted_by: Recipient = None, display_detail: bool = True
-    ) -> Union[List[Notification], Rows]:
-        """Return all notifications that have been soft deleted.
-
-        Args:
-            deleted_by (Recipient): Restrict to deletions by this user.
-            display_detail (bool): Whether whole notifications are returned.
-
-        Returns:
-            Union[List[Notification], Rows]: The matching notifications.
-        """
-        return await self._execute(
-            self.deleted_statement(deleted_by, display_detail), display_detail
-        )
-
-    async def get(
-        self, statement: Select, notification_id: int
-    ) -> Optional[Notification]:
-        """Return a single notification visible through a statement.
-
-        Args:
-            statement (Select): A statement selecting whole notifications.
-            notification_id (int): The ID of the notification.
-
-        Returns:
-            Optional[Notification]: The notification, or ``None``.
-        """
-        notification = await queryset.get_notification(
-            self.session, statement, notification_id
-        )
-        if notification is not None:
-            await hydrate_notification_identities(self.session, [notification])
-        return notification
-
-    async def summary(self, statement: Select, user: Any) -> Dict[str, Any]:
-        """Return total/read counts and category/priority breakdowns.
-
-        The statement is expected to be restricted to the authenticated user's
-        sent audience and to exclude notifications that user has cleared. The
-        aggregate is executed as one SQL query and does not load notification
-        ORM objects.
-
-        Args:
-            statement (Select): The scoped statement, including optional filters.
-            user (Any): The identity whose read state is summarized.
-
-        Returns:
-            Dict[str, Any]: Total/read counts plus grouped category and priority
-                breakdowns. Each breakdown contains total, unread and read.
-        """
-        aggregate = self.query_set.summary_statement(statement, user)
-        result = await self.session.execute(aggregate)
-        summary: Dict[str, Any] = {
-            "total": 0,
-            "unread": 0,
-            "read": 0,
-            "by_category": {},
-            "by_priority": {},
-        }
-        for row in result.mappings().all():
-            category = row["category"]
-            priority = row["priority"]
-            is_seen = bool(row["is_seen"])
-            count = int(row["count"] or 0)
-            state_key = "read" if is_seen else "unread"
-
-            summary["total"] += count
-            summary[state_key] += count
-
-            for dimension, value in (
-                ("by_category", category),
-                ("by_priority", priority),
-            ):
-                breakdown = summary[dimension].setdefault(
-                    value, {"total": 0, "unread": 0, "read": 0}
+        if group_audience_strategy == "snapshot" and groups:
+            adapter = get_identity_adapter()
+            group_items = (
+                list(groups) if isinstance(groups, (list, tuple, set)) else [groups]
+            )
+            snapshot_members: List[object] = []
+            for group in group_items:
+                snapshot_members.extend(
+                    await adapter.get_group_user_ids(self.session, group)
                 )
-                breakdown["total"] += count
-                breakdown[state_key] += count
+            # Persist a frozen audience as individual recipient associations.
+            existing_recipients = (
+                list(recipients)
+                if isinstance(recipients, (list, tuple, set))
+                else ([recipients] if recipients is not None else [])
+            )
+            recipients = list(
+                {
+                    adapter.get_user_id(member): member
+                    for member in existing_recipients + snapshot_members
+                }.values()
+            )
+            groups = None
 
-        return summary
+        return recipients, groups
 
-    async def preview(
-        self, statement: Select, user: Any, limit: int = 5
-    ) -> List[Dict[str, Any]]:
-        """Return bounded recent notification fields and their read state.
-
-        The query selects only the columns required by the preview response; it
-        does not instantiate ORM objects or hydrate generic relations.
-
-        Args:
-            statement (Select): The scoped statement, including optional filters.
-            user (Any): The identity whose read state is included.
-            limit (int): Maximum number of records to return.
-
-        Returns:
-            List[Dict[str, Any]]: Preview rows including the ``is_seen`` flag.
-        """
-        preview_statement = self.query_set.preview_statement(statement, user, limit)
-        result = await self.session.execute(preview_statement)
-        return [dict(row) for row in result.mappings().all()]
-
-    async def count(self, statement: Select) -> int:
-        """Return how many rows a statement would produce.
-
-        Args:
-            statement (Select): The statement to count.
-
-        Returns:
-            int: The number of matching rows.
-        """
-        return await queryset.count(self.session, statement)
-
-    # ------------------------------------------------------------------
-    # Writes
-    # ------------------------------------------------------------------
-
-    async def create_notification(
+    # Existing positional API remains backward compatible; complex work is delegated.
+    async def create_notification(  # pylint: disable=too-many-positional-arguments,too-many-locals
         self,
         verb: Optional[str] = None,
         actor: Actor = None,
@@ -613,75 +253,13 @@ class NotificationDataAccessLayer:
             category = "general"
         category = normalize_category(category)
         priority = normalize_priority(priority)
-        if group_audience_strategy not in {"dynamic", "snapshot"}:
-            raise ValueError("group_audience_strategy must be 'dynamic' or 'snapshot'.")
+        recipients, groups = await self._snapshot_audience(
+            recipients, groups, group_audience_strategy
+        )
 
-        if group_audience_strategy == "snapshot" and groups:
-            adapter = get_identity_adapter()
-            group_items = (
-                list(groups) if isinstance(groups, (list, tuple, set)) else [groups]
-            )
-            snapshot_members = []
-            for group in group_items:
-                snapshot_members.extend(
-                    await adapter.get_group_user_ids(self.session, group)
-                )
-            # Persist a frozen audience as individual recipient associations.
-            existing_recipients = (
-                list(recipients)
-                if isinstance(recipients, (list, tuple, set))
-                else ([recipients] if recipients is not None else [])
-            )
-            recipients = list(
-                {
-                    adapter.get_user_id(member): member
-                    for member in existing_recipients + snapshot_members
-                }.values()
-            )
-            groups = None
-
-        if deduplication_key is not None:
-            if not isinstance(deduplication_key, str):
-                raise TypeError("deduplication_key must be a string or None.")
-            if (
-                not deduplication_key.strip()
-                or len(deduplication_key) > 255
-                or "\x00" in deduplication_key
-            ):
-                raise ValueError(
-                    "deduplication_key must contain 1 to 255 non-NUL characters."
-                )
-            if not isinstance(deduplication_scope, str):
-                raise TypeError("deduplication_scope must be a string.")
-            if (
-                not deduplication_scope.strip()
-                or len(deduplication_scope) > 255
-                or "\x00" in deduplication_scope
-            ):
-                raise ValueError(
-                    "deduplication_scope must contain 1 to 255 non-NUL characters."
-                )
-            if deduplication_key_expires_at is not None:
-                if not isinstance(deduplication_key_expires_at, datetime):
-                    raise TypeError(
-                        "deduplication_key_expires_at must be a datetime or None."
-                    )
-                if (
-                    deduplication_key_expires_at.tzinfo is None
-                    or deduplication_key_expires_at.utcoffset() is None
-                ):
-                    raise ValueError(
-                        "deduplication_key_expires_at must be timezone-aware."
-                    )
-                deduplication_key_expires_at = deduplication_key_expires_at.astimezone(
-                    timezone.utc
-                )
-                if deduplication_key_expires_at <= datetime.now(timezone.utc):
-                    raise ValueError(
-                        "deduplication_key_expires_at must be in the future."
-                    )
-        elif deduplication_key_expires_at is not None:
-            raise ValueError("deduplication_key_expires_at requires deduplication_key.")
+        deduplication_key_expires_at = _validate_deduplication(
+            deduplication_key, deduplication_scope, deduplication_key_expires_at
+        )
 
         if deduplication_key is None:
             notification = await queryset.create_notification(

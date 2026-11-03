@@ -8,10 +8,10 @@ and authorization models.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional, Sequence, Type
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Type
 from uuid import UUID
 
-from sqlalchemy import String, cast, select
+from sqlalchemy import Select, String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_notification.utils.loading import ensure_loaded
@@ -82,7 +82,7 @@ class IdentityAdapter:
     def get_user_id(self, user: Any) -> str:
         """Return the normalized identifier for a host user or raw ID."""
         if isinstance(user, (str, int, UUID)):
-            identifier = user
+            identifier: object = user
         else:
             identifier = getattr(user, self.user_id_attribute, None)
         return normalize_identity_id(identifier)
@@ -90,7 +90,7 @@ class IdentityAdapter:
     def get_group_id(self, group: Any) -> str:
         """Return the normalized identifier for a host group or raw ID."""
         if isinstance(group, (str, int, UUID)):
-            identifier = group
+            identifier: object = group
         else:
             identifier = getattr(group, self.group_id_attribute, None)
         return normalize_identity_id(identifier)
@@ -245,24 +245,27 @@ def require_staff_identity(user: Any) -> None:
         )
 
 
-_cached_adapter_class: Optional[Type[Any]] = None
-_cached_adapter_instance: Optional[IdentityAdapter] = None
+@dataclass
+class _AdapterCache:
+    adapter_class: Optional[Type[IdentityAdapter]] = None
+    instance: Optional[IdentityAdapter] = None
+
+
+_adapter_cache = _AdapterCache()
 
 
 def get_identity_adapter() -> IdentityAdapter:
     """Return the cached instance of the configured identity adapter class."""
-    global _cached_adapter_class, _cached_adapter_instance
-
     from fastapi_notification.settings.conf import config
 
     adapter_class = config.identity_adapter
     if not isinstance(adapter_class, type):
         adapter = adapter_class
     else:
-        if adapter_class is not _cached_adapter_class:
-            _cached_adapter_instance = adapter_class()
-            _cached_adapter_class = adapter_class
-        adapter = _cached_adapter_instance
+        if adapter_class is not _adapter_cache.adapter_class:
+            _adapter_cache.instance = adapter_class()
+            _adapter_cache.adapter_class = adapter_class
+        adapter = _adapter_cache.instance
 
     required_methods = (
         "get_user_id",
@@ -298,6 +301,53 @@ def index_resolved_identities(
     return indexed
 
 
+async def _association_ids(
+    session: AsyncSession,
+    statement: Select[int, str],
+    notification_ids: Sequence[int],
+) -> Dict[int, list[str]]:
+    """Index batched association rows without triggering ORM relationship loads."""
+    indexed: Dict[int, list[str]] = {identifier: [] for identifier in notification_ids}
+    result = await session.execute(statement)
+    for notification_id, identity_id in result.all():
+        indexed[notification_id].append(identity_id)
+    return indexed
+
+
+async def _notification_audiences(
+    session: AsyncSession, notifications: Sequence[Any]
+) -> Tuple[Dict[int, list[str]], Dict[int, list[str]], Dict[int, list[str]]]:
+    """Fetch each audience projection once for a batch of notifications."""
+    from fastapi_notification.models.associations import notification_group
+    from fastapi_notification.models.notification_recipient import NotificationRecipient
+    from fastapi_notification.models.notification_seen import NotificationSeen
+
+    notification_ids = [item.id for item in notifications]
+    recipients_by_notification = await _association_ids(
+        session,
+        select(
+            NotificationRecipient.notification_id, NotificationRecipient.recipient_id
+        ).where(NotificationRecipient.notification_id.in_(notification_ids)),
+        notification_ids,
+    )
+    groups_by_notification = await _association_ids(
+        session,
+        select(
+            notification_group.c.notification_id, notification_group.c.group_id
+        ).where(notification_group.c.notification_id.in_(notification_ids)),
+        notification_ids,
+    )
+    seen_by_notification = await _association_ids(
+        session,
+        select(NotificationSeen.notification_id, NotificationSeen.user_id).where(
+            NotificationSeen.notification_id.in_(notification_ids)
+        ),
+        notification_ids,
+    )
+
+    return recipients_by_notification, groups_by_notification, seen_by_notification
+
+
 async def hydrate_notification_identities(
     session: AsyncSession, notifications: Sequence[Any]
 ) -> None:
@@ -310,45 +360,9 @@ async def hydrate_notification_identities(
     if not notifications:
         return
 
-    from fastapi_notification.models.associations import notification_group
-    from fastapi_notification.models.notification_recipient import NotificationRecipient
-    from fastapi_notification.models.notification_seen import NotificationSeen
-
-    notification_ids = [item.id for item in notifications]
-    recipient_result = await session.execute(
-        select(
-            NotificationRecipient.notification_id,
-            NotificationRecipient.recipient_id,
-        ).where(NotificationRecipient.notification_id.in_(notification_ids))
+    recipients_by_notification, groups_by_notification, seen_by_notification = (
+        await _notification_audiences(session, notifications)
     )
-    group_result = await session.execute(
-        select(
-            notification_group.c.notification_id,
-            notification_group.c.group_id,
-        ).where(notification_group.c.notification_id.in_(notification_ids))
-    )
-    seen_result = await session.execute(
-        select(NotificationSeen.notification_id, NotificationSeen.user_id).where(
-            NotificationSeen.notification_id.in_(notification_ids)
-        )
-    )
-
-    recipients_by_notification: Dict[int, list[str]] = {
-        notification_id: [] for notification_id in notification_ids
-    }
-    groups_by_notification: Dict[int, list[str]] = {
-        notification_id: [] for notification_id in notification_ids
-    }
-    seen_by_notification: Dict[int, list[str]] = {
-        notification_id: [] for notification_id in notification_ids
-    }
-
-    for notification_id, identity_id in recipient_result.all():
-        recipients_by_notification[notification_id].append(identity_id)
-    for notification_id, identity_id in group_result.all():
-        groups_by_notification[notification_id].append(identity_id)
-    for notification_id, identity_id in seen_result.all():
-        seen_by_notification[notification_id].append(identity_id)
 
     user_ids = sorted(
         {

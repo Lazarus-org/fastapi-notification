@@ -1,8 +1,10 @@
-from typing import Any, List
+from typing import Any, List, Union
 
 import pytest
+from sqlalchemy import select
 
 from fastapi_notification.identity import IdentityAdapter
+from fastapi_notification.models.notification import Notification
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
@@ -11,6 +13,11 @@ from fastapi_notification.repository.manager.notification import (
 )
 from fastapi_notification.repository.queryset import notification as queryset
 from fastapi_notification.settings.conf import configure
+from fastapi_notification.tests.typing_helpers import (
+    async_call_result,
+    call_result,
+    session_double,
+)
 
 pytestmark = [pytest.mark.models, pytest.mark.models_permissions]
 
@@ -35,7 +42,7 @@ class FakeUser:
 class FakeRecord:
     """A stand-in object carrying only an identifier."""
 
-    def __init__(self, identifier: int) -> None:
+    def __init__(self, identifier: Union[int, str]) -> None:
         self.id = identifier
 
 
@@ -95,7 +102,7 @@ def test_validate_permission_passes_for_a_recipient() -> None:
     user = FakeUser(1, groups=[])
     permission = NotificationPermission(FakeNotification([FakeRecord(1)], []))
 
-    assert permission.validate_permission(user, "delete") is None
+    assert call_result(lambda: permission.validate_permission(user, "delete")) is None
 
 
 def test_validate_permission_raises_and_logs(
@@ -189,7 +196,9 @@ def test_sync_permission_supports_explicit_cached_membership_adapter() -> None:
 @pytest.mark.asyncio
 async def test_dal_hard_delete_requires_a_staff_actor() -> None:
     """The DAL does not expose an unguarded permanent-delete path."""
-    dal = NotificationDataAccessLayer(None)  # The guard runs before database I/O.
+    dal = NotificationDataAccessLayer(
+        session_double(None)
+    )  # The guard runs before database I/O.
     user = FakeUser(30, groups=[])
 
     with pytest.raises(PermissionError, match="Staff permission is required"):
@@ -199,7 +208,7 @@ async def test_dal_hard_delete_requires_a_staff_actor() -> None:
 @pytest.mark.asyncio
 async def test_dal_hard_delete_requires_an_explicit_actor() -> None:
     """Omitting the actor cannot silently turn a DAL call into admin access."""
-    dal = NotificationDataAccessLayer(None)
+    dal = NotificationDataAccessLayer(session_double(None))
 
     with pytest.raises(PermissionError, match="Staff permission is required"):
         await dal.delete_notification(1, soft_delete=False)
@@ -208,17 +217,17 @@ async def test_dal_hard_delete_requires_an_explicit_actor() -> None:
 @pytest.mark.asyncio
 async def test_dal_bulk_hard_delete_requires_a_staff_actor() -> None:
     """Bulk deletion applies the same staff policy as single deletion."""
-    dal = NotificationDataAccessLayer(None)
+    dal = NotificationDataAccessLayer(session_double(None))
     user = FakeUser(31, groups=[])
 
     with pytest.raises(PermissionError, match="Staff permission is required"):
-        await dal.delete_many(None, actor=user)
+        await dal.delete_many(select(Notification), actor=user)
 
 
 @pytest.mark.asyncio
 async def test_dal_hard_delete_rejects_superuser_without_staff() -> None:
     """Superuser status does not bypass the DAL staff-only admin policy."""
-    dal = NotificationDataAccessLayer(None)
+    dal = NotificationDataAccessLayer(session_double(None))
     superuser = FakeUser(32, groups=[], is_superuser=True)
 
     with pytest.raises(PermissionError, match="Staff permission is required"):
@@ -228,10 +237,10 @@ async def test_dal_hard_delete_rejects_superuser_without_staff() -> None:
 @pytest.mark.asyncio
 async def test_dal_bulk_hard_delete_requires_an_explicit_actor() -> None:
     """The bulk DAL operation rejects a missing actor consistently."""
-    dal = NotificationDataAccessLayer(None)
+    dal = NotificationDataAccessLayer(session_double(None))
 
     with pytest.raises(PermissionError, match="Staff permission is required"):
-        await dal.delete_many(None)
+        await dal.delete_many(select(Notification))
 
 
 @pytest.mark.asyncio
@@ -240,7 +249,9 @@ async def test_low_level_query_delete_requires_staff_actor() -> None:
     user = FakeUser(33, groups=[])
 
     with pytest.raises(PermissionError, match="Staff permission is required"):
-        await queryset.delete_notification(None, 1, soft_delete=False, actor=user)
+        await queryset.delete_notification(
+            session_double(None), 1, soft_delete=False, actor=user
+        )
 
 
 @pytest.mark.asyncio
@@ -249,4 +260,6 @@ async def test_low_level_bulk_delete_requires_staff_actor() -> None:
     user = FakeUser(34, groups=[])
 
     with pytest.raises(PermissionError, match="Staff permission is required"):
-        await queryset.delete_many(None, None, actor=user)
+        await queryset.delete_many(
+            session_double(None), select(Notification), actor=user
+        )

@@ -12,7 +12,15 @@ pytestmark = [pytest.mark.utils, pytest.mark.utils_title_generator]
 
 def test_filter_drops_empty_values() -> None:
     """Empty values are stripped from the representation."""
-    data = {"a": 1, "b": None, "c": "", "d": [], "e": {}, "f": False, "g": 0}
+    data: dict[str, object] = {
+        "a": 1,
+        "b": None,
+        "c": "",
+        "d": [],
+        "e": {},
+        "f": False,
+        "g": 0,
+    }
 
     assert filter_non_empty_fields(data) == {"a": 1, "f": False, "g": 0}
 

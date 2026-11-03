@@ -1,5 +1,7 @@
 """Unit tests for localized template resolution using a lightweight session fake."""
 
+from types import TracebackType
+from typing import Optional, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -11,7 +13,7 @@ from fastapi_notification.repository.manager.templates import (
 
 
 @pytest.mark.asyncio
-async def test_resolve_tries_exact_locale_then_base_language_then_default():
+async def test_resolve_tries_exact_locale_then_base_language_then_default() -> None:
     session = AsyncMock()
     fa_template = NotificationTemplate(
         key="orders.payment_received",
@@ -32,7 +34,7 @@ async def test_resolve_tries_exact_locale_then_base_language_then_default():
 
 
 @pytest.mark.asyncio
-async def test_resolve_uses_default_locale_when_base_language_missing():
+async def test_resolve_uses_default_locale_when_base_language_missing() -> None:
     session = AsyncMock()
     english = NotificationTemplate(
         key="orders.payment_received",
@@ -52,7 +54,7 @@ async def test_resolve_uses_default_locale_when_base_language_missing():
 
 
 @pytest.mark.asyncio
-async def test_resolve_raises_when_no_translation_or_fallback_exists():
+async def test_resolve_raises_when_no_translation_or_fallback_exists() -> None:
     session = AsyncMock()
     session.scalar.return_value = None
 
@@ -63,7 +65,7 @@ async def test_resolve_raises_when_no_translation_or_fallback_exists():
 
 
 @pytest.mark.asyncio
-async def test_render_returns_rendered_text_and_resolved_locale():
+async def test_render_returns_rendered_text_and_resolved_locale() -> None:
     session = AsyncMock()
     template = NotificationTemplate(
         key="orders.payment_received",
@@ -89,7 +91,7 @@ async def test_render_returns_rendered_text_and_resolved_locale():
 
 
 @pytest.mark.asyncio
-async def test_render_rejects_rendered_verb_over_column_limit():
+async def test_render_rejects_rendered_verb_over_column_limit() -> None:
     session = AsyncMock()
     template = NotificationTemplate(
         key="orders.long",
@@ -107,7 +109,7 @@ async def test_render_rejects_rendered_verb_over_column_limit():
 
 
 @pytest.mark.asyncio
-async def test_register_updates_existing_translation():
+async def test_register_updates_existing_translation() -> None:
     session = AsyncMock()
     existing = NotificationTemplate(
         key="orders.paid",
@@ -135,7 +137,7 @@ async def test_register_updates_existing_translation():
 
 
 @pytest.mark.asyncio
-async def test_get_returns_exact_active_translation():
+async def test_get_returns_exact_active_translation() -> None:
     session = AsyncMock()
     template = NotificationTemplate(
         key="orders.paid",
@@ -151,7 +153,7 @@ async def test_get_returns_exact_active_translation():
 
 
 @pytest.mark.asyncio
-async def test_delete_removes_existing_translation():
+async def test_delete_removes_existing_translation() -> None:
     session = AsyncMock()
     template = NotificationTemplate(
         key="orders.paid",
@@ -171,7 +173,7 @@ async def test_delete_removes_existing_translation():
 
 
 @pytest.mark.asyncio
-async def test_delete_returns_false_when_translation_does_not_exist():
+async def test_delete_returns_false_when_translation_does_not_exist() -> None:
     session = AsyncMock()
     session.scalar.return_value = None
 
@@ -186,15 +188,20 @@ async def test_delete_returns_false_when_translation_does_not_exist():
 class _NestedTransaction:
     """Minimal async context manager representing a SQLAlchemy savepoint."""
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "_NestedTransaction":
         return self
 
-    async def __aexit__(self, exc_type, exc, traceback):
+    async def __aexit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> bool:
         return False
 
 
 @pytest.mark.asyncio
-async def test_register_inserts_new_translation_inside_savepoint():
+async def test_register_inserts_new_translation_inside_savepoint() -> None:
     session = AsyncMock()
     session.add = Mock()
     session.scalar.return_value = None
@@ -216,7 +223,7 @@ async def test_register_inserts_new_translation_inside_savepoint():
 
 
 @pytest.mark.asyncio
-async def test_register_recovers_from_concurrent_unique_key_insert():
+async def test_register_recovers_from_concurrent_unique_key_insert() -> None:
     from sqlalchemy.exc import IntegrityError
 
     session = AsyncMock()
@@ -247,7 +254,7 @@ async def test_register_recovers_from_concurrent_unique_key_insert():
 
 
 @pytest.mark.asyncio
-async def test_register_reraises_integrity_error_without_canonical_row():
+async def test_register_reraises_integrity_error_without_canonical_row() -> None:
     from sqlalchemy.exc import IntegrityError
 
     session = AsyncMock()
@@ -264,18 +271,18 @@ async def test_register_reraises_integrity_error_without_canonical_row():
 
 
 @pytest.mark.asyncio
-async def test_register_rejects_invalid_active_flag():
+async def test_register_rejects_invalid_active_flag() -> None:
     with pytest.raises(TypeError, match="is_active must be a boolean"):
         await NotificationTemplateDataAccessLayer(AsyncMock()).register(
             key="orders.created",
             locale="en",
             verb_template="created",
-            is_active=1,
+            is_active=cast(bool, 1),
         )
 
 
 @pytest.mark.asyncio
-async def test_register_rejects_verb_template_over_column_limit():
+async def test_register_rejects_verb_template_over_column_limit() -> None:
     with pytest.raises(ValueError, match="127 characters"):
         await NotificationTemplateDataAccessLayer(AsyncMock()).register(
             key="orders.created", locale="en", verb_template="x" * 128
@@ -283,7 +290,7 @@ async def test_register_rejects_verb_template_over_column_limit():
 
 
 @pytest.mark.asyncio
-async def test_resolve_prefers_exact_locale_when_available():
+async def test_resolve_prefers_exact_locale_when_available() -> None:
     session = AsyncMock()
     exact = NotificationTemplate(
         key="orders.created",

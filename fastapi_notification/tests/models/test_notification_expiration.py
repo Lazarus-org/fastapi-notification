@@ -1,6 +1,7 @@
 """Unit tests for timezone-aware notification expiration semantics."""
 
 from datetime import datetime, timedelta, timezone
+from typing import Optional, cast
 
 import pytest
 
@@ -9,7 +10,7 @@ from fastapi_notification.models.notification import Notification
 pytestmark = [pytest.mark.models, pytest.mark.models_notification]
 
 
-def build_notification(expires_at=None) -> Notification:
+def build_notification(expires_at: Optional[datetime] = None) -> Notification:
     """Build an unpersisted notification for expiration unit tests."""
     return Notification(
         verb="test",
@@ -47,7 +48,7 @@ def test_naive_expiration_is_rejected() -> None:
 def test_non_datetime_expiration_is_rejected() -> None:
     """Invalid expiration values fail before database persistence."""
     with pytest.raises(TypeError, match="datetime"):
-        build_notification("2026-11-02T12:00:00Z")
+        build_notification(cast(datetime, "2026-11-02T12:00:00Z"))
 
 
 def test_expiration_boundary_is_inclusive() -> None:

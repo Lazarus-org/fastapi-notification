@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Literal, Optional, Sequence, Union, overload
 
 from sqlalchemy import (
     ColumnElement,
@@ -37,27 +37,13 @@ from fastapi_notification.models.notification import Notification, notification_
 from fastapi_notification.models.notification_recipient import NotificationRecipient
 from fastapi_notification.models.notification_seen import NotificationSeen
 from fastapi_notification.models.state import insert_many_from_select_if_absent
-
-
-def _as_sequence(value: Any) -> Sequence[Any]:
-    """Normalize one identity or a collection of identities."""
-    if value is None:
-        return []
-    if isinstance(value, (str, bytes)) or hasattr(value, "id"):
-        return [value]
-    if isinstance(value, (list, tuple, set)):
-        return list(value)
-    try:
-        return list(value)
-    except TypeError:
-        return [value]
-
-
-def _ids(value: Any, identity_type: str = "user") -> List[str]:
-    """Extract normalized user or group identifiers through the adapter."""
-    adapter = get_identity_adapter()
-    getter = adapter.get_user_id if identity_type == "user" else adapter.get_group_id
-    return [getter(item) for item in _as_sequence(value)]
+from fastapi_notification.repository.queryset.audience import (
+    _as_sequence,
+    _delete_notification_associations,
+    _ids,
+    add_groups,
+    add_recipients,
+)
 
 
 # pylint: disable=too-many-arguments
@@ -503,6 +489,24 @@ class NotificationQuerySet:
         )
 
 
+@overload
+async def fetch(
+    session: AsyncSession, statement: Select, display_detail: Literal[False] = False
+) -> Rows: ...
+
+
+@overload
+async def fetch(
+    session: AsyncSession, statement: Select, *, display_detail: Literal[True]
+) -> List[Notification]: ...
+
+
+@overload
+async def fetch(
+    session: AsyncSession, statement: Select, display_detail: bool = False
+) -> Union[List[Notification], Rows]: ...
+
+
 async def fetch(
     session: AsyncSession, statement: Select, display_detail: bool = False
 ) -> Union[List[Notification], Rows]:
@@ -542,7 +546,7 @@ async def count(session: AsyncSession, statement: Select) -> int:
 
 
 # pylint: disable=too-many-arguments,too-many-locals
-async def create_notification(
+async def create_notification(  # pylint: disable=too-many-positional-arguments
     session: AsyncSession,
     verb: str,
     actor: Actor,
@@ -677,6 +681,8 @@ async def update_notification(
 
     Raises:
         LookupError: If no notification has the given ID.
+        TypeError: If expires_at is not a datetime or None.
+        ValueError: If expires_at has no timezone or taxonomy values are invalid.
     """
     if expires_at is not None and clear_expires_at:
         raise ValueError("Set expires_at or clear it, not both.")
@@ -710,26 +716,6 @@ async def update_notification(
     return notification
 
 
-async def _delete_notification_associations(
-    session: AsyncSession, notification_ids: Sequence[int]
-) -> None:
-    """Remove dependent rows even when database foreign keys are disabled."""
-    for model in (
-        NotificationDeduplication,
-        NotificationSeen,
-        DeletedNotification,
-        NotificationRecipient,
-    ):
-        await session.execute(
-            delete(model).where(model.notification_id.in_(notification_ids))
-        )
-    await session.execute(
-        delete(notification_group).where(
-            notification_group.c.notification_id.in_(notification_ids)
-        )
-    )
-
-
 async def delete_notification(
     session: AsyncSession,
     notification_id: int,
@@ -747,6 +733,7 @@ async def delete_notification(
         notification_id (int): The ID of the notification.
         recipient (Recipient): The recipient performing the deletion.
         soft_delete (bool): Whether to soft delete. Defaults to True.
+        actor (Any): Staff identity required for permanent deletion.
 
     Raises:
         ValueError: If a soft delete is requested without a recipient.
@@ -966,58 +953,6 @@ async def purge_expired(
     if deleted_count is None or deleted_count < 0:
         return len(notification_ids)
     return int(deleted_count)
-
-
-async def add_recipients(
-    session: AsyncSession, notification: Notification, recipients: Recipients
-) -> None:
-    """Address an existing notification to further recipients.
-
-    Args:
-        session (AsyncSession): The session used to write.
-        notification (Notification): The notification to address.
-        recipients (Recipients): The users to address it to.
-    """
-    recipient_objects = list(_as_sequence(recipients))
-    notification.recipient = list(notification.recipient) + recipient_objects
-    session.add_all(
-        [
-            NotificationRecipient(
-                notification_id=notification.id, recipient_id=recipient_id
-            )
-            for recipient_id in _ids(recipients, "user")
-        ]
-    )
-    await session.flush()
-
-
-async def add_groups(
-    session: AsyncSession, notification: Notification, groups: Groups
-) -> None:
-    """Address an existing notification to further groups.
-
-    The association rows are inserted directly rather than by appending to the
-    relationship, which would require the collection to be loaded first.
-
-    Args:
-        session (AsyncSession): The session used to write.
-        notification (Notification): The notification to address.
-        groups (Groups): The groups to address it to.
-    """
-    group_objects = list(_as_sequence(groups))
-    notification.group = list(notification.group) + group_objects
-    group_ids = _ids(groups, "group")
-    if not group_ids:
-        return
-
-    await session.execute(
-        insert(notification_group),
-        [
-            {"notification_id": notification.id, "group_id": group_id}
-            for group_id in group_ids
-        ],
-    )
-    await session.flush()
 
 
 async def get_notification(

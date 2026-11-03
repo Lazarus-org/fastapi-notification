@@ -9,7 +9,7 @@ from fastapi_notification.models.notification_quiet_hours import validate_timezo
 from fastapi_notification.repository.manager.scheduling import _next_run
 
 
-def test_daily_schedule_uses_local_wall_clock():
+def test_daily_schedule_uses_local_wall_clock() -> None:
     now = datetime(2026, 11, 2, 7, 0, tzinfo=timezone.utc)
     result = _next_run(
         after=now,
@@ -21,7 +21,7 @@ def test_daily_schedule_uses_local_wall_clock():
     assert result == datetime(2026, 11, 2, 14, 0, tzinfo=timezone.utc)
 
 
-def test_daily_schedule_moves_to_tomorrow_when_time_has_passed():
+def test_daily_schedule_moves_to_tomorrow_when_time_has_passed() -> None:
     now = datetime(2026, 11, 2, 15, 0, tzinfo=timezone.utc)
     result = _next_run(
         after=now,
@@ -33,7 +33,7 @@ def test_daily_schedule_moves_to_tomorrow_when_time_has_passed():
     assert result == datetime(2026, 11, 3, 14, 0, tzinfo=timezone.utc)
 
 
-def test_weekly_schedule_uses_monday_zero_based_weekday():
+def test_weekly_schedule_uses_monday_zero_based_weekday() -> None:
     now = datetime(2026, 11, 2, 7, 0, tzinfo=timezone.utc)  # Monday
     result = _next_run(
         after=now,
@@ -45,7 +45,7 @@ def test_weekly_schedule_uses_monday_zero_based_weekday():
     assert result == datetime(2026, 11, 4, 14, 0, tzinfo=timezone.utc)
 
 
-def test_weekly_schedule_requires_valid_weekday():
+def test_weekly_schedule_requires_valid_weekday() -> None:
     with pytest.raises(ValueError):
         _next_run(
             after=datetime.now(timezone.utc),
@@ -56,7 +56,7 @@ def test_weekly_schedule_requires_valid_weekday():
         )
 
 
-def test_naive_now_is_rejected():
+def test_naive_now_is_rejected() -> None:
     with pytest.raises(ValueError):
         _next_run(
             after=datetime(2026, 11, 2),
@@ -67,12 +67,12 @@ def test_naive_now_is_rejected():
         )
 
 
-def test_invalid_timezone_is_rejected():
+def test_invalid_timezone_is_rejected() -> None:
     with pytest.raises(ValueError):
         validate_timezone("Mars/Olympus_Mons")
 
 
-def test_daily_schedule_keeps_wall_clock_after_dst_transition():
+def test_daily_schedule_keeps_wall_clock_after_dst_transition() -> None:
     # New York moves from UTC-5 to UTC-4 on 2026-03-08. The local 09:00
     # schedule should remain 09:00, with its UTC instant moving by one hour.
     before = _next_run(
@@ -93,7 +93,7 @@ def test_daily_schedule_keeps_wall_clock_after_dst_transition():
     assert after == datetime(2026, 3, 9, 13, 0, tzinfo=timezone.utc)
 
 
-def test_weekly_schedule_rejects_invalid_weekday():
+def test_weekly_schedule_rejects_invalid_weekday() -> None:
     with pytest.raises(ValueError):
         _next_run(
             after=datetime.now(timezone.utc),
@@ -104,7 +104,7 @@ def test_weekly_schedule_rejects_invalid_weekday():
         )
 
 
-def test_quiet_hours_and_digest_schemas_validate_timezone_and_frequency():
+def test_quiet_hours_and_digest_schemas_validate_timezone_and_frequency() -> None:
     from fastapi_notification.api.schemas.notification_scheduling import (
         DigestScheduleUpdate,
         QuietHoursUpdate,
@@ -142,7 +142,7 @@ def test_quiet_hours_and_digest_schemas_validate_timezone_and_frequency():
         )
 
 
-def test_schedule_schema_rejects_unknown_timezone():
+def test_schedule_schema_rejects_unknown_timezone() -> None:
     from fastapi_notification.api.schemas.notification_scheduling import (
         DigestScheduleUpdate,
     )
@@ -168,7 +168,11 @@ def test_schedule_schema_rejects_unknown_timezone():
     ],
 )
 def test_transition_policy_runs_once_per_local_date(
-    zone: Any, day: Any, hour: Any, minute: Any, expected: Any
+    zone: str,
+    day: tuple[int, int, int],
+    hour: int,
+    minute: int,
+    expected: tuple[int, int],
 ) -> None:
     result = _next_run(
         after=datetime(*day, tzinfo=timezone.utc),

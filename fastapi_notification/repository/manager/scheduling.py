@@ -19,6 +19,7 @@ from fastapi_notification.models.notification_quiet_hours import (
     validate_timezone,
 )
 from fastapi_notification.models.state import insert_if_absent
+from fastapi_notification.utils.sqlalchemy import execute_dml
 
 
 def _require_aware(value: datetime) -> datetime:
@@ -78,7 +79,8 @@ class NotificationSchedulingDataAccessLayer:
         )
         return list(result.scalars().all())
 
-    async def set_quiet_hours(
+    # Keep explicit existing public options; see STATIC_ANALYSIS.md.
+    async def set_quiet_hours(  # pylint: disable=too-many-arguments
         self,
         user: Any,
         *,
@@ -122,11 +124,12 @@ class NotificationSchedulingDataAccessLayer:
 
     async def reset_quiet_hours(self, user: Any, *, channel: str = "*") -> bool:
         channel = normalize_preference_key(channel, allow_wildcard=True)
-        result = await self.session.execute(
+        result = await execute_dml(
+            self.session,
             delete(NotificationQuietHours).where(
                 NotificationQuietHours.user_id == self._user_id(user),
                 NotificationQuietHours.channel == channel,
-            )
+            ),
         )
         return bool(result.rowcount)
 
@@ -201,7 +204,7 @@ class NotificationSchedulingDataAccessLayer:
         if not quiet:
             return None
         end_date = local.date()
-        if start > end and current >= start:
+        if end < start <= current:
             end_date += timedelta(days=1)
         return (
             datetime.combine(end_date, end, tzinfo=zone)
@@ -219,7 +222,8 @@ class NotificationSchedulingDataAccessLayer:
         )
         return list(result.scalars().all())
 
-    async def set_digest_schedule(
+    # Keep explicit existing public options; see STATIC_ANALYSIS.md.
+    async def set_digest_schedule(  # pylint: disable=too-many-arguments
         self,
         user: Any,
         *,
@@ -295,11 +299,12 @@ class NotificationSchedulingDataAccessLayer:
             .where(NotificationDigestBatch.schedule_id.in_(schedule_ids))
             .values(schedule_id=None)
         )
-        result = await self.session.execute(
+        result = await execute_dml(
+            self.session,
             delete(NotificationDigestSchedule).where(
                 NotificationDigestSchedule.user_id == user_id,
                 NotificationDigestSchedule.channel == channel,
-            )
+            ),
         )
         return bool(result.rowcount)
 
@@ -333,7 +338,7 @@ class NotificationSchedulingDataAccessLayer:
             .with_for_update(skip_locked=True)
         )
         schedules = list(result.scalars().all())
-        batches = []
+        batches: List[NotificationDigestBatch] = []
         while len(batches) < limit:
             progressed = False
             for schedule in schedules:
@@ -402,7 +407,8 @@ class NotificationSchedulingDataAccessLayer:
         if not isinstance(stale_after, timedelta) or stale_after.total_seconds() <= 0:
             raise ValueError("stale_after must be a positive timedelta.")
         stale_before = now - stale_after
-        result = await self.session.execute(
+        result = await execute_dml(
+            self.session,
             update(NotificationDigestBatch)
             .where(
                 NotificationDigestBatch.id == batch_id,
@@ -420,7 +426,7 @@ class NotificationSchedulingDataAccessLayer:
                 attempts=NotificationDigestBatch.attempts + 1,
                 claimed_at=now,
                 last_error=None,
-            )
+            ),
         )
         if not result.rowcount:
             return None
@@ -428,7 +434,8 @@ class NotificationSchedulingDataAccessLayer:
         return await self.session.get(NotificationDigestBatch, batch_id)
 
     async def mark_batch_sent(self, batch_id: int) -> bool:
-        result = await self.session.execute(
+        result = await execute_dml(
+            self.session,
             update(NotificationDigestBatch)
             .where(
                 NotificationDigestBatch.id == batch_id,
@@ -438,20 +445,21 @@ class NotificationSchedulingDataAccessLayer:
                 status="sent",
                 sent_at=datetime.now(timezone.utc),
                 last_error=None,
-            )
+            ),
         )
         return bool(result.rowcount)
 
     async def mark_batch_failed(self, batch_id: int, error: str) -> bool:
         if not isinstance(error, str) or not error.strip():
             raise ValueError("error must be a non-empty string.")
-        result = await self.session.execute(
+        result = await execute_dml(
+            self.session,
             update(NotificationDigestBatch)
             .where(
                 NotificationDigestBatch.id == batch_id,
                 NotificationDigestBatch.status == "processing",
             )
-            .values(status="failed", last_error=error[:4000])
+            .values(status="failed", last_error=error[:4000]),
         )
         return bool(result.rowcount)
 
@@ -463,13 +471,14 @@ class NotificationSchedulingDataAccessLayer:
     ) -> bool:
         """Return a claimed batch to pending until a quiet window ends."""
         until = _require_aware(until)
-        result = await self.session.execute(
+        result = await execute_dml(
+            self.session,
             update(NotificationDigestBatch)
             .where(
                 NotificationDigestBatch.id == batch_id,
                 NotificationDigestBatch.status == "processing",
             )
-            .values(status="pending", available_at=until, claimed_at=None)
+            .values(status="pending", available_at=until, claimed_at=None),
         )
         return bool(result.rowcount)
 

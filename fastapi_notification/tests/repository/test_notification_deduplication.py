@@ -18,6 +18,7 @@ from fastapi_notification.repository.manager.notification import (
     NotificationDataAccessLayer,
 )
 from fastapi_notification.settings.conf import configure
+from fastapi_notification.tests.typing_helpers import session_double
 
 
 class AsyncExecutionAdapter:
@@ -70,9 +71,7 @@ def _database() -> Any:
 
 def _dal(session: Session) -> NotificationDataAccessLayer:
     """Bind the DAL to the synchronous test adapter."""
-    return NotificationDataAccessLayer(  # type: ignore[arg-type]
-        AsyncExecutionAdapter(session)
-    )
+    return NotificationDataAccessLayer(session_double(AsyncExecutionAdapter(session)))
 
 
 @pytest.mark.asyncio
@@ -120,6 +119,7 @@ async def test_same_active_key_returns_original_notification_unchanged() -> None
             assert retry.description == "original event"
             assert [item.id for item in retry.recipient] == [first_user.id]
             key_record = session.scalar(select(NotificationDeduplication))
+            assert key_record is not None
             assert key_record.expires_at == first_key_expiry
             assert session.scalar(select(func.count()).select_from(Notification)) == 1
             assert (
@@ -199,14 +199,18 @@ async def test_expired_key_can_be_reused_without_changing_old_notification() -> 
             session.commit()
 
             assert second.id != first_id
-            assert session.get(Notification, first_id).verb == "first event"
+            original = session.get(Notification, first_id)
+            assert original is not None
+            assert original.verb == "first event"
             key_record = session.scalar(
                 select(NotificationDeduplication).where(
                     NotificationDeduplication.scope == "orders",
                     NotificationDeduplication.deduplication_key == "order:77",
                 )
             )
+            assert key_record is not None
             assert key_record.notification_id == second.id
+            assert key_record is not None
             assert key_record.expires_at is None
     finally:
         engine.dispose()
@@ -567,6 +571,7 @@ async def test_orphaned_deduplication_record_is_reclaimed() -> None:
                     NotificationDeduplication.deduplication_key == "event:orphan",
                 )
             )
+            assert record is not None
             assert record.notification_id == created.id
     finally:
         engine.dispose()

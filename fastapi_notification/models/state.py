@@ -1,24 +1,30 @@
 """Concurrency-safe persistence helpers for per-user notification state."""
 
-from typing import Any, Mapping, Sequence, Tuple, Type
+from typing import Any, Mapping, Sequence, Tuple, Type, Union
 
 from sqlalchemy import select, true
+from sqlalchemy.dialects.postgresql import Insert as PostgreSQLInsert
+from sqlalchemy.dialects.sqlite import Insert as SQLiteInsert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
+from fastapi_notification.utils.sqlalchemy import execute_dml
 
-def _dialect_insert(session: AsyncSession, model: Type[Any]) -> Any:
+
+def _dialect_insert(
+    session: AsyncSession, model: Type[Any]
+) -> Union[SQLiteInsert, PostgreSQLInsert, None]:
     """Return a dialect-specific INSERT supporting ON CONFLICT, if available."""
     dialect_name = session.get_bind().dialect.name
     if dialect_name == "sqlite":
-        from sqlalchemy.dialects.sqlite import insert
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-        return insert(model)
+        return sqlite_insert(model)
     if dialect_name == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert
+        from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 
-        return insert(model)
+        return postgresql_insert(model)
     return None
 
 
@@ -44,8 +50,8 @@ async def insert_if_absent(
 
     SQLite and PostgreSQL use their native ``ON CONFLICT DO NOTHING`` support.
     Other dialects use a savepoint and the database unique constraint as the
-    concurrency arbiter. MySQL-family duplicate recovery uses ``FOR UPDATE`` to
-    avoid stale repeatable-read snapshots. The caller retains ownership of the
+    concurrency arbiter. MySQL duplicate recovery uses a current read to avoid
+    stale repeatable-read snapshots. The caller retains ownership of the
     outer transaction; this helper never commits or rolls it back.
 
     Returns:
@@ -53,6 +59,7 @@ async def insert_if_absent(
         inserted it.
 
     Raises:
+        RuntimeError: If a completed insert cannot be retrieved.
         IntegrityError: If the insert fails for a reason other than a duplicate
             natural key, or if the conflicting row cannot be found afterwards.
     """
@@ -63,7 +70,7 @@ async def insert_if_absent(
         statement = dialect_statement.values(**dict(values)).on_conflict_do_nothing(
             index_elements=[getattr(model, column) for column in unique_columns]
         )
-        result = await session.execute(statement)
+        result = await execute_dml(session, statement)
         inserted = result.rowcount == 1
     else:
         instance = model(**dict(values))
@@ -106,15 +113,14 @@ async def insert_many_from_select_if_absent(
     """
     dialect_statement = _dialect_insert(session, model)
     if dialect_statement is not None:
-        # SQLite parses ``INSERT .. SELECT .. ON CONFLICT`` ambiguously unless
-        # the SELECT has a WHERE clause separating it from the conflict clause.
+        # SQLite needs a WHERE clause to disambiguate ON CONFLICT syntax.
         if session.get_bind().dialect.name == "sqlite":
             source = source.where(true())
         statement = dialect_statement.from_select(list(column_names), source)
         statement = statement.on_conflict_do_nothing(
             index_elements=[getattr(model, column) for column in unique_columns]
         )
-        result = await session.execute(statement)
+        result = await execute_dml(session, statement)
         return max(int(result.rowcount or 0), 0)
 
     inserted_count = 0

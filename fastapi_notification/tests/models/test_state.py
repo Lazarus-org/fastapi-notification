@@ -1,11 +1,12 @@
 """Tests for portable, conflict-safe notification state persistence."""
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 from sqlalchemy import literal, select
 from sqlalchemy.dialects import mysql, postgresql
+from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_notification.models.notification import Notification
@@ -16,6 +17,7 @@ from fastapi_notification.models.state import (
     insert_if_absent,
     insert_many_from_select_if_absent,
 )
+from fastapi_notification.tests.typing_helpers import session_double
 
 pytestmark = pytest.mark.models
 
@@ -25,7 +27,9 @@ def test_dialect_insert_supports_postgresql_upsert() -> None:
     fake_session = SimpleNamespace(
         get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
     )
-    statement = _dialect_insert(fake_session, NotificationSeen)
+    statement = _dialect_insert(session_double(fake_session), NotificationSeen)
+    assert statement is not None
+    dialect_factory: Callable[[], Dialect] = postgresql.dialect
     compiled = str(
         statement.values(notification_id=1, user_id="42")
         .on_conflict_do_nothing(
@@ -34,7 +38,7 @@ def test_dialect_insert_supports_postgresql_upsert() -> None:
                 NotificationSeen.user_id,
             ]
         )
-        .compile(dialect=postgresql.dialect())
+        .compile(dialect=dialect_factory())
     )
 
     assert "ON CONFLICT (notification_id, user_id) DO NOTHING" in compiled
@@ -101,7 +105,7 @@ def test_dialect_insert_returns_none_for_unknown_dialect() -> None:
         get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="mysql"))
     )
 
-    assert _dialect_insert(fake_session, NotificationSeen) is None
+    assert _dialect_insert(session_double(fake_session), NotificationSeen) is None
 
 
 async def test_insert_if_absent_reraises_non_duplicate_integrity_errors(
@@ -195,7 +199,7 @@ def test_mysql_duplicate_lookup_uses_a_current_read() -> None:
         get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="mysql"))
     )
     statement = _existing_row_statement(
-        fake_session,
+        session_double(fake_session),
         NotificationSeen,
         (NotificationSeen.notification_id == 1, NotificationSeen.user_id == "42"),
     )

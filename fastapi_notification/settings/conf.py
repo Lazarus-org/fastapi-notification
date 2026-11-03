@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union, cast
 
 from fastapi_notification.constants.default_settings import (
     default_api_settings,
@@ -152,7 +152,7 @@ class NotificationConfig:
             None,
         )
         self.notification_serializer_class: Optional[Type[Any]] = (
-            self.get_optional_classes(
+            self._get_class_setting(
                 f"{self.prefix}SERIALIZER_CLASS",
                 default_serializer_settings.notification_serializer_class,
             )
@@ -161,11 +161,11 @@ class NotificationConfig:
             f"{self.prefix}USER_SERIALIZER_FIELDS",
             default_serializer_settings.user_serializer_fields,
         )
-        self.user_serializer_class: Optional[Type[Any]] = self.get_optional_classes(
+        self.user_serializer_class: Optional[Type[Any]] = self._get_class_setting(
             f"{self.prefix}USER_SERIALIZER_CLASS",
             default_serializer_settings.user_serializer_class,
         )
-        self.group_serializer_class: Optional[Type[Any]] = self.get_optional_classes(
+        self.group_serializer_class: Optional[Type[Any]] = self._get_class_setting(
             f"{self.prefix}GROUP_SERIALIZER_CLASS",
             default_serializer_settings.group_serializer_class,
         )
@@ -177,21 +177,19 @@ class NotificationConfig:
             f"{self.prefix}STAFF_USER_THROTTLE_RATE",
             default_throttle_settings.staff_user_throttle_rate,
         )
-        self.api_throttle_class: Optional[Type[Any]] = self.get_optional_classes(
+        self.api_throttle_class: Optional[Type[Any]] = self._get_class_setting(
             f"{self.prefix}API_THROTTLE_CLASS",
             default_throttle_settings.throttle_class,
         )
-        self.api_pagination_class: Optional[Type[Any]] = self.get_optional_classes(
+        self.api_pagination_class: Optional[Type[Any]] = self._get_class_setting(
             f"{self.prefix}API_PAGINATION_CLASS",
             default_pagination_and_filter_settings.pagination_class,
         )
-        self.api_extra_permission_class: Optional[Type[Any]] = (
-            self.get_optional_classes(
-                f"{self.prefix}API_EXTRA_PERMISSION_CLASS",
-                default_api_settings.extra_permission_class,
-            )
+        self.api_extra_permission_class: Optional[Type[Any]] = self._get_class_setting(
+            f"{self.prefix}API_EXTRA_PERMISSION_CLASS",
+            default_api_settings.extra_permission_class,
         )
-        self.api_filterset_class: Optional[Type[Any]] = self.get_optional_classes(
+        self.api_filterset_class: Optional[Type[Any]] = self._get_class_setting(
             f"{self.prefix}API_FILTERSET_CLASS",
             default_pagination_and_filter_settings.filterset_class,
         )
@@ -222,6 +220,19 @@ class NotificationConfig:
             return default_value
 
         return _parse_environment_value(raw, default_value)
+
+    def _get_class_setting(
+        self, setting_name: str, default_path: Optional[Union[str, List[str]]]
+    ) -> Optional[Type[Any]]:
+        """View a validated single-class setting from the generic import boundary.
+
+        The public loader also supports lists. Single-class settings are validated by
+        the startup checks; invalid raw values remain intact for those checks. Imported
+        host classes have no common nominal base class.
+        """
+        return cast(
+            Optional[Type[Any]], self.get_optional_classes(setting_name, default_path)
+        )
 
     def get_optional_classes(
         self,

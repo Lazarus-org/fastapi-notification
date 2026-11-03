@@ -14,14 +14,15 @@ from fastapi_notification.models.notification_recipient import NotificationRecip
 from fastapi_notification.settings.conf import config
 
 
-class NotificationFilter:
+# Explicit query fields are the public FastAPI dependency/schema contract.
+class NotificationFilter:  # pylint: disable=too-many-instance-attributes
     """Applies filtering, searching and ordering to a notification statement.
 
     Replaces the ``django-filter`` filter set, the search backend and the ordering
     backend of the original package with a single dependency driven by query parameters.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         group__id: Annotated[
             Optional[str], Query(description="Filter notifications sent to this group.")

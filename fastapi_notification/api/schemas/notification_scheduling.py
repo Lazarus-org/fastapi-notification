@@ -30,7 +30,7 @@ class QuietHoursUpdate(BaseModel):
         return validate_timezone(value)
 
     @model_validator(mode="after")
-    def validate_window(self):
+    def validate_window(self) -> "QuietHoursUpdate":
         if self.start_time.tzinfo is not None or self.end_time.tzinfo is not None:
             raise ValueError(
                 "quiet-hour times must be timezone-naive wall-clock times."
@@ -86,7 +86,7 @@ class DigestScheduleUpdate(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_weekday(self):
+    def validate_weekday(self) -> "DigestScheduleUpdate":
         if self.local_time.tzinfo is not None:
             raise ValueError("local_time must be a timezone-naive wall-clock time.")
         if self.frequency == "weekly" and self.weekday is None:

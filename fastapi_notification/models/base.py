@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from sqlalchemy import DateTime
+from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.types import TypeDecorator
 
@@ -18,7 +19,11 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class UTCDateTime(TypeDecorator):
+# SQLAlchemy's TypeDecorator supplies optional literal handling and its own MRO.
+# See validation/issue17-1/STATIC_ANALYSIS.md for the framework-contract rationale.
+class UTCDateTime(
+    TypeDecorator[datetime]
+):  # pylint: disable=abstract-method,too-many-ancestors
     """Store timezone-aware datetimes in UTC and restore UTC on every backend.
 
     SQLite's native ``DateTime(timezone=True)`` storage drops timezone metadata. This
@@ -29,7 +34,7 @@ class UTCDateTime(TypeDecorator):
     impl = DateTime(timezone=True)
     cache_ok = True
 
-    def process_bind_param(self, value: Any, dialect: Any) -> Any:
+    def process_bind_param(self, value: object, dialect: Dialect) -> Optional[datetime]:
         """Normalize aware datetime values before persistence."""
         del dialect
         if value is None:
@@ -40,7 +45,9 @@ class UTCDateTime(TypeDecorator):
             raise ValueError("UTCDateTime values must be timezone-aware.")
         return value.astimezone(timezone.utc)
 
-    def process_result_value(self, value: Any, dialect: Any) -> Any:
+    def process_result_value(
+        self, value: Optional[datetime], dialect: Dialect
+    ) -> Optional[datetime]:
         """Return loaded datetime values as timezone-aware UTC instants."""
         del dialect
         if value is None:

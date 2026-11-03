@@ -39,6 +39,7 @@ def test_the_wrapper_keeps_the_handler_identity() -> None:
     @conditional_route(condition=True)
     async def handler() -> None:
         """Some documentation."""
+        return None
 
     assert handler.__name__ == "handler"
     assert handler.__doc__ == "Some documentation."

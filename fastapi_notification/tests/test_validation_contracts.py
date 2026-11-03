@@ -6,6 +6,7 @@ from typing import Any, cast
 
 import pytest
 from sqlalchemy import Boolean, Date, String, select
+from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -37,12 +38,12 @@ from fastapi_notification.settings.conf import configure
 )
 def test_utc_column_rejects_invalid_bind_values(value: Any, error: Any) -> None:
     with pytest.raises(error):
-        UTCDateTime().process_bind_param(value, None)
+        UTCDateTime().process_bind_param(value, sqlite_dialect())
 
 
 def test_utc_column_converts_aware_database_results() -> None:
     value = datetime(2026, 1, 1, 4, tzinfo=timezone(timedelta(hours=4)))
-    assert UTCDateTime().process_result_value(value, None) == datetime(
+    assert UTCDateTime().process_result_value(value, sqlite_dialect()) == datetime(
         2026, 1, 1, tzinfo=timezone.utc
     )
 

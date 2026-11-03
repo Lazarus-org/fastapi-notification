@@ -81,7 +81,7 @@ async def test_concurrent_creates_with_same_key_produce_one_notification(
                 await session.commit()
                 return notification.id
 
-        notification_ids: List[int] = await asyncio.gather(
+        notification_ids = await asyncio.gather(
             create_once("first retry"), create_once("second retry")
         )
         assert notification_ids[0] == notification_ids[1]
@@ -275,7 +275,9 @@ async def test_concurrent_retries_reclaim_an_expired_key_only_once(
                 == 1
             )
             key_record = session.scalar(select(NotificationDeduplication))
+            assert key_record is not None
             assert key_record.notification_id == ids[0]
+            assert key_record is not None
             assert key_record.notification_id != initial_id
     finally:
         engine.dispose()

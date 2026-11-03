@@ -66,7 +66,9 @@ def check_notification_settings(**kwargs: Any) -> List[Error]:
     else:
         try:
             get_identity_adapter()
-        except Exception as error:
+        # Arbitrary host adapter constructors may raise any Exception; collect it
+        # with the other startup configuration errors rather than aborting early.
+        except Exception as error:  # pylint: disable=broad-exception-caught
             errors.append(
                 Error(
                     f"The configured identity adapter is invalid: {error}",

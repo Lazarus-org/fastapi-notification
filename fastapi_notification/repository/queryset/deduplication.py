@@ -10,6 +10,7 @@ from fastapi_notification.models.base import utcnow
 from fastapi_notification.models.deduplication import NotificationDeduplication
 from fastapi_notification.models.notification import Notification
 from fastapi_notification.models.state import insert_if_absent
+from fastapi_notification.utils.sqlalchemy import execute_dml
 
 
 async def _get_key_record(
@@ -103,7 +104,8 @@ async def claim_deduplication_key(
 
             # Only a finite, elapsed expiry can be reclaimed. NULL represents
             # an indefinitely retained key and is never eligible for reuse.
-            result = await session.execute(
+            result = await execute_dml(
+                session,
                 update(NotificationDeduplication)
                 .where(
                     NotificationDeduplication.id == record.id,
@@ -115,7 +117,7 @@ async def claim_deduplication_key(
                     expires_at=expires_at,
                     created_at=now,
                 )
-                .execution_options(synchronize_session=False)
+                .execution_options(synchronize_session=False),
             )
             if result.rowcount == 1:
                 # Keep a previously loaded ledger object coherent when the

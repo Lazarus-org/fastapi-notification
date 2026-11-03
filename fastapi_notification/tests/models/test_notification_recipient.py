@@ -40,8 +40,8 @@ async def test_str_uses_loaded_relationships(
     result = await session.execute(select(NotificationRecipient))
     link = result.scalars().one()
 
-    link.recipient = user
-    link.notification = notification
+    setattr(link, "recipient", user)
+    setattr(link, "notification", notification)
 
     assert "Recipient: ann" in str(link)
     assert "liked your post" in str(link)

@@ -97,8 +97,14 @@ async def test_resolve_generic_relations_loads_every_reference(
     assert reloaded is not None
     await reloaded.resolve_generic_relations(session)
 
+    assert reloaded.actor is not None
+    assert user is not None
     assert reloaded.actor.id == user.id
+    assert group is not None
+    assert reloaded.target is not None
     assert reloaded.target.id == group.id
+    assert other_user is not None
+    assert reloaded.action_object is not None
     assert reloaded.action_object.id == other_user.id
 
 

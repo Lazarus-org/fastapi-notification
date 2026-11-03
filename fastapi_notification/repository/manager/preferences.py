@@ -11,6 +11,7 @@ from fastapi_notification.models.notification_preference import (
     normalize_preference_key,
 )
 from fastapi_notification.models.state import insert_if_absent
+from fastapi_notification.utils.sqlalchemy import execute_dml
 
 
 class NotificationPreferenceDataAccessLayer:
@@ -77,13 +78,14 @@ class NotificationPreferenceDataAccessLayer:
         """Remove a preference override, restoring inherited/default behavior."""
         category = normalize_preference_key(category, allow_wildcard=True)
         channel = normalize_preference_key(channel, allow_wildcard=True)
-        result = await self.session.execute(
+        result = await execute_dml(
+            self.session,
             delete(NotificationPreference).where(
                 NotificationPreference.user_id
                 == get_identity_adapter().get_user_id(user),
                 NotificationPreference.category == category,
                 NotificationPreference.channel == channel,
-            )
+            ),
         )
         return bool(result.rowcount)
 

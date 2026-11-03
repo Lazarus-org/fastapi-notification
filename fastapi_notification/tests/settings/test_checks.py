@@ -1,4 +1,5 @@
 import pytest
+from fastapi import Request
 
 from fastapi_notification.settings.checks import (
     ImproperlyConfigured,
@@ -6,6 +7,7 @@ from fastapi_notification.settings.checks import (
     run_checks,
 )
 from fastapi_notification.settings.conf import configure
+from fastapi_notification.tests.typing_helpers import async_call_result, call_result
 
 pytestmark = [pytest.mark.settings, pytest.mark.settings_checks]
 
@@ -17,7 +19,7 @@ def test_default_settings_are_valid() -> None:
 
 def test_run_checks_is_silent_when_valid() -> None:
     """Validating a good configuration raises nothing."""
-    assert run_checks() is None
+    assert call_result(lambda: run_checks()) is None
 
 
 def test_a_non_boolean_flag_is_reported() -> None:
@@ -122,7 +124,7 @@ def test_extra_permission_class_must_have_a_no_argument_constructor() -> None:
         def __init__(self, required: str) -> None:
             self.required = required
 
-        def __call__(self, request, user) -> bool:
+        def __call__(self, request: Request, user: object) -> bool:
             return bool(self.required and request and user)
 
     configure(API_EXTRA_PERMISSION_CLASS=RequiresArgumentPermission)
@@ -135,7 +137,7 @@ def test_extra_permission_class_must_have_a_no_argument_constructor() -> None:
 class CallablePermission:
     """A valid no-argument permission dependency."""
 
-    def __call__(self, request, user) -> bool:
+    def __call__(self, request: Request, user: object) -> bool:
         return bool(request and user)
 
 

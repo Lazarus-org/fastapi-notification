@@ -1,13 +1,23 @@
 """API tests for authenticated notification preference management."""
 
+from typing import Callable
+
 import pytest
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi_notification.models.auth import User
 
 pytestmark = [pytest.mark.api, pytest.mark.api_routes]
 
 
 async def test_list_preferences_returns_only_current_users_rules(
-    client, user, other_user, as_user, session
-):
+    client: AsyncClient,
+    user: User,
+    other_user: User,
+    as_user: Callable[[object], None],
+    session: AsyncSession,
+) -> None:
     from fastapi_notification.repository.manager.preferences import (
         NotificationPreferenceDataAccessLayer,
     )
@@ -29,7 +39,9 @@ async def test_list_preferences_returns_only_current_users_rules(
     assert response.json()["results"][0]["updated_at"].endswith("Z")
 
 
-async def test_update_and_reset_preference(client, user, as_user):
+async def test_update_and_reset_preference(
+    client: AsyncClient, user: User, as_user: Callable[[object], None]
+) -> None:
     as_user(user)
     response = await client.put(
         "/notifications/preferences/",
@@ -46,12 +58,14 @@ async def test_update_and_reset_preference(client, user, as_user):
     assert response.status_code == 204
 
 
-async def test_preference_endpoints_require_authentication(client):
+async def test_preference_endpoints_require_authentication(client: AsyncClient) -> None:
     response = await client.get("/notifications/preferences/")
     assert response.status_code == 401
 
 
-async def test_invalid_preference_payload_is_rejected(client, user, as_user):
+async def test_invalid_preference_payload_is_rejected(
+    client: AsyncClient, user: User, as_user: Callable[[object], None]
+) -> None:
     as_user(user)
     response = await client.put(
         "/notifications/preferences/",
@@ -60,7 +74,7 @@ async def test_invalid_preference_payload_is_rejected(client, user, as_user):
     assert response.status_code == 422
 
 
-def test_preferences_routes_are_in_openapi():
+def test_preferences_routes_are_in_openapi() -> None:
     from fastapi import FastAPI
 
     from fastapi_notification.api.routers.notification import create_router

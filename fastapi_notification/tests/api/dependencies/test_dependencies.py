@@ -24,6 +24,7 @@ from fastapi_notification.api.routers.notification import create_router
 from fastapi_notification.identity import IdentityAdapter
 from fastapi_notification.models.auth import User
 from fastapi_notification.settings.conf import configure
+from fastapi_notification.tests.typing_helpers import async_call_result, call_result
 
 pytestmark = [pytest.mark.api, pytest.mark.api_dependencies]
 
@@ -62,7 +63,7 @@ def make_request() -> Request:
 async def test_the_session_placeholder_explains_itself() -> None:
     """The unconfigured session dependency says how to configure it."""
     with pytest.raises(NotImplementedError, match="needs a database session"):
-        await anext(get_session())
+        await get_session().__anext__()
 
 
 async def test_the_user_placeholder_explains_itself() -> None:
@@ -124,7 +125,12 @@ async def test_the_packaged_admin_guard_passes_staff() -> None:
 
 async def test_no_extra_permission_means_no_check() -> None:
     """With nothing configured, the extra permission is a no-op."""
-    assert await apply_extra_permission(make_request(), Viewer()) is None
+    assert (
+        await async_call_result(
+            lambda: apply_extra_permission(make_request(), Viewer())
+        )
+        is None
+    )
 
 
 async def test_an_allowing_extra_permission_passes() -> None:
@@ -135,7 +141,12 @@ async def test_an_allowing_extra_permission_passes() -> None:
         )
     )
 
-    assert await apply_extra_permission(make_request(), Viewer()) is None
+    assert (
+        await async_call_result(
+            lambda: apply_extra_permission(make_request(), Viewer())
+        )
+        is None
+    )
 
 
 async def test_a_refusing_extra_permission_blocks() -> None:
@@ -170,7 +181,7 @@ def test_no_throttle_class_means_no_limit() -> None:
     """With no throttle class, nothing is ever refused."""
     configure(API_THROTTLE_CLASS=None)
 
-    assert check_throttle(Viewer()) is None
+    assert call_result(lambda: check_throttle(Viewer())) is None
 
 
 def test_the_throttle_refuses_a_burst() -> None:
@@ -184,6 +195,7 @@ def test_the_throttle_refuses_a_burst() -> None:
         check_throttle(viewer)
 
     assert raised.value.status_code == 429
+    assert raised.value.headers is not None
     assert "Retry-After" in raised.value.headers
 
 

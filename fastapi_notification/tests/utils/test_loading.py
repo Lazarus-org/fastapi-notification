@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_notification.models.auth import Group, User
+from fastapi_notification.models.base import AuthBase
 from fastapi_notification.utils.loading import ensure_loaded, loaded_collection
 
 pytestmark = [pytest.mark.utils]
@@ -32,7 +33,7 @@ async def test_unloaded_relationships_are_loaded(
     await session.flush()
 
     await session.execute(
-        Group.__table__.metadata.tables["user_group"].insert(),
+        AuthBase.metadata.tables["user_group"].insert(),
         [{"user_id": user.id, "group_id": group.id}],
     )
     session.expire(user, ["groups"])

@@ -59,6 +59,8 @@ class RoleBasedUserRateThrottle:
     """
 
     scope: str = "user"
+    base_rate: str
+    staff_rate: str
 
     def get_rate(self, user: Any) -> str:
         """Return the configured throttle rate for a user.

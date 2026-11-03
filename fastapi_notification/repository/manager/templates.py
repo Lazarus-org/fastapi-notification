@@ -36,7 +36,8 @@ class NotificationTemplateDataAccessLayer:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def register(
+    # Keep explicit existing public options; see STATIC_ANALYSIS.md.
+    async def register(  # pylint: disable=too-many-arguments
         self,
         key: str,
         locale: str,

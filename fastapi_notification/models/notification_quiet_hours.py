@@ -1,5 +1,7 @@
 """Per-user quiet-hour rules for notification delivery."""
 
+from __future__ import annotations
+
 from datetime import datetime, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -17,7 +19,7 @@ def validate_timezone(value: str) -> str:
     try:
         ZoneInfo(value)
     except (ZoneInfoNotFoundError, ValueError) as exc:
-        raise ValueError("Unknown IANA timezone: {}".format(value)) from exc
+        raise ValueError(f"Unknown IANA timezone: {value}") from exc
     return value
 
 
@@ -46,8 +48,9 @@ class NotificationQuietHours(Base):
 
     def __repr__(self) -> str:
         return (
-            "NotificationQuietHours(user_id={!r}, channel={!r}, enabled={!r})"
-        ).format(self.user_id, self.channel, self.enabled)
+            f"NotificationQuietHours(user_id={self.user_id!r}, "
+            f"channel={self.channel!r}, enabled={self.enabled!r})"
+        )
 
 
 __all__ = ["NotificationQuietHours", "validate_timezone"]

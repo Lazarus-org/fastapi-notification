@@ -13,7 +13,7 @@ from fastapi_notification.repository.manager.templates import (
 
 
 @pytest.mark.asyncio
-async def test_create_notification_uses_rendered_template_and_provenance():
+async def test_create_notification_uses_rendered_template_and_provenance() -> None:
     session = AsyncMock()
     notification = object()
     rendered = RenderedNotificationTemplate(
@@ -40,6 +40,8 @@ async def test_create_notification_uses_rendered_template_and_provenance():
         )
 
     assert result is notification
+    assert create.await_args is not None
+    assert create.await_args is not None
     kwargs = create.await_args.kwargs
     assert kwargs["verb"] == "payment received"
     assert kwargs["description"] == "Order A-42 has been paid."
@@ -49,7 +51,7 @@ async def test_create_notification_uses_rendered_template_and_provenance():
 
 
 @pytest.mark.asyncio
-async def test_manual_notification_still_requires_verb():
+async def test_manual_notification_still_requires_verb() -> None:
     with pytest.raises(ValueError, match="verb is required"):
         await NotificationDataAccessLayer(AsyncMock()).create_notification(
             actor=object()
@@ -57,7 +59,7 @@ async def test_manual_notification_still_requires_verb():
 
 
 @pytest.mark.asyncio
-async def test_notification_requires_actor_even_when_template_is_used():
+async def test_notification_requires_actor_even_when_template_is_used() -> None:
     with pytest.raises(ValueError, match="actor is required"):
         await NotificationDataAccessLayer(AsyncMock()).create_notification(
             template_key="orders.payment_received"

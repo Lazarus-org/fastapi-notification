@@ -17,10 +17,14 @@ async def get_session() -> AsyncIterator[AsyncSession]:
     Raises:
         NotImplementedError: Always, until the host supplies a dependency.
     """
+    yield _missing_session()
+
+
+def _missing_session() -> AsyncSession:
+    """Fail when no host-owned session dependency was supplied."""
     raise NotImplementedError(
         "fastapi-notification needs a database session. Pass session_dependency="
         " to the router factory, or override"
         " fastapi_notification.api.dependencies.db.get_session through"
         " app.dependency_overrides."
     )
-    yield  # pragma: no cover

@@ -12,20 +12,17 @@ def validate_template(template: str) -> None:
     """Reject attribute access, indexing, conversions and format expressions."""
     if not isinstance(template, str):
         raise TypeError("Template content must be a string.")
-    try:
-        parsed = _FORMATTER.parse(template)
-        for _, field_name, format_spec, conversion in parsed:
-            if field_name is None:
-                continue
-            if not _FIELD.fullmatch(field_name):
-                raise ValueError(
-                    "Template variables must be simple identifiers; attribute "
-                    "and item access are not supported."
-                )
-            if format_spec or conversion:
-                raise ValueError("Template format specifications are not supported.")
-    except ValueError:
-        raise
+    parsed = _FORMATTER.parse(template)
+    for _, field_name, format_spec, conversion in parsed:
+        if field_name is None:
+            continue
+        if not _FIELD.fullmatch(field_name):
+            raise ValueError(
+                "Template variables must be simple identifiers; attribute "
+                "and item access are not supported."
+            )
+        if format_spec or conversion:
+            raise ValueError("Template format specifications are not supported.")
 
 
 def render_template(template: str, context: Optional[Mapping[str, Any]] = None) -> str:

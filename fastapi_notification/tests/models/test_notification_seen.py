@@ -70,8 +70,8 @@ async def test_str_uses_loaded_relationships(
     seen = await NotificationSeen.create(session, notification, user)
     await session.commit()
 
-    seen.user = user
-    seen.notification = notification
+    setattr(seen, "user", user)
+    setattr(seen, "notification", notification)
 
     assert str(seen).startswith("ann (ID:")
     assert "liked your post" in str(seen)

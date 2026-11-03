@@ -100,45 +100,12 @@ class NotificationRoutes(BaseNotificationRoutes):
         )
 
 
-# pylint: disable=too-many-arguments
-def create_notification_router(
-    session_dependency: Optional[Callable[..., Any]] = None,
-    current_user_dependency: Optional[Callable[..., Any]] = None,
-    prefix: str = "/notifications",
-    tags: Optional[Sequence[str]] = None,
-) -> APIRouter:
-    """Build the notifications router.
-
-    Routes disabled in settings are never registered, so they are absent from
-    the application and from its OpenAPI schema.
-
-    Args:
-        session_dependency (Optional[Callable[..., Any]]): Dependency yielding
-            the database session. Defaults to the package placeholder, which a
-            host may instead override through ``app.dependency_overrides``.
-        current_user_dependency (Optional[Callable[..., Any]]): Dependency
-            returning the authenticated user.
-        prefix (str): The path prefix to mount the routes under.
-        tags (Optional[Sequence[str]]): OpenAPI tags for the routes.
-
-    Returns:
-        APIRouter: The configured router.
-    """
-    from fastapi_notification.settings.checks import run_checks
-
-    run_checks()
-
-    session_dep = session_dependency or get_session
-    user_dep = make_authenticated_dependency(
-        current_user_dependency or get_current_user
-    )
-    routes = NotificationRoutes(user_dependency=user_dep)
-
-    router = APIRouter(
-        prefix=prefix,
-        tags=list(tags) if tags else ["notifications"],
-        dependencies=routes.dependencies,
-    )
+def _register_settings_routes(
+    router: APIRouter,
+    session_dep: Callable[..., Any],
+    user_dep: Callable[..., Any],
+) -> None:
+    """Register independently scoped preference and scheduling settings routes."""
 
     @router.get(
         "/preferences/",
@@ -328,6 +295,14 @@ def create_notification_router(
         await session.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+
+def _register_overview_routes(
+    router: APIRouter,
+    routes: NotificationRoutes,
+    session_dep: Callable[..., Any],
+    user_dep: Callable[..., Any],
+) -> None:
+    """Register summaries and previews with the same visibility policy as listings."""
     if routes.is_method_enabled("LIST"):
 
         @router.get(
@@ -407,6 +382,53 @@ def create_notification_router(
                 for row in rows
             ]
             return NotificationPreviewResponse(results=results).model_dump()
+
+
+# pylint: disable=too-many-arguments
+def create_notification_router(
+    session_dependency: Optional[Callable[..., Any]] = None,
+    current_user_dependency: Optional[Callable[..., Any]] = None,
+    prefix: str = "/notifications",
+    tags: Optional[Sequence[str]] = None,
+) -> APIRouter:
+    """Build the notifications router.
+
+    Routes disabled in settings are never registered, so they are absent from
+    the application and from its OpenAPI schema.
+
+    Args:
+        session_dependency (Optional[Callable[..., Any]]): Dependency yielding
+            the database session. Defaults to the package placeholder, which a
+            host may instead override through ``app.dependency_overrides``.
+        current_user_dependency (Optional[Callable[..., Any]]): Dependency
+            returning the authenticated user.
+        prefix (str): The path prefix to mount the routes under.
+        tags (Optional[Sequence[str]]): OpenAPI tags for the routes.
+
+    Returns:
+        APIRouter: The configured router.
+    """
+    from fastapi_notification.settings.checks import run_checks
+
+    run_checks()
+
+    session_dep = session_dependency or get_session
+    user_dep = make_authenticated_dependency(
+        current_user_dependency or get_current_user
+    )
+    routes = NotificationRoutes(user_dependency=user_dep)
+
+    router = APIRouter(
+        prefix=prefix,
+        tags=list(tags) if tags else ["notifications"],
+        dependencies=routes.dependencies,
+    )
+
+    _register_settings_routes(router, session_dep, user_dep)
+
+    _register_overview_routes(router, routes, session_dep, user_dep)
+
+    if routes.is_method_enabled("LIST"):
 
         @router.get("/", summary="List unseen notifications")
         async def list_notifications(  # type: ignore[misc]
