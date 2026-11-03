@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import Insert as PostgreSQLInsert
 from sqlalchemy.dialects.sqlite import Insert as SQLiteInsert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import Select
+from sqlalchemy.sql import CompoundSelect, Select
 
 from fastapi_notification.utils.sqlalchemy import execute_dml
 
@@ -101,7 +101,7 @@ async def insert_many_from_select_if_absent(
     session: AsyncSession,
     model: Type[Any],
     column_names: Sequence[str],
-    source: Select,
+    source: Union[Select, CompoundSelect],
     unique_columns: Sequence[str],
 ) -> int:
     """Insert rows selected by ``source`` without duplicate-key races.
@@ -113,7 +113,10 @@ async def insert_many_from_select_if_absent(
     """
     dialect_statement = _dialect_insert(session, model)
     if dialect_statement is not None:
-        # SQLite needs a WHERE clause to disambiguate ON CONFLICT syntax.
+        # SQLAlchemy needs a plain SELECT to append Python-side column defaults.
+        if isinstance(source, CompoundSelect):
+            source = select(*source.subquery().c)
+        # SQLite also needs a WHERE clause to disambiguate ON CONFLICT syntax.
         if session.get_bind().dialect.name == "sqlite":
             source = source.where(true())
         statement = dialect_statement.from_select(list(column_names), source)

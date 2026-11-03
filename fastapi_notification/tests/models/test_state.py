@@ -205,3 +205,45 @@ def test_mysql_duplicate_lookup_uses_a_current_read() -> None:
     )
 
     assert "FOR UPDATE" in str(statement.compile(dialect=mysql.dialect()))
+
+
+async def test_native_bulk_insert_accepts_union_sources(
+    session: AsyncSession, notification: Notification, user: Any
+) -> None:
+    """SQLite must disambiguate ON CONFLICT after a compound SELECT source."""
+    from sqlalchemy import union_all
+
+    source = union_all(
+        select(
+            literal(notification.id).label("notification_id"),
+            literal(str(user.id)).label("user_id"),
+        ),
+        select(
+            literal(notification.id).label("notification_id"),
+            literal(str(user.id)).label("user_id"),
+        ),
+    )
+    assert (
+        await insert_many_from_select_if_absent(
+            session,
+            NotificationSeen,
+            ("notification_id", "user_id"),
+            source,
+            ("notification_id", "user_id"),
+        )
+        == 1
+    )
+    assert (
+        await insert_many_from_select_if_absent(
+            session,
+            NotificationSeen,
+            ("notification_id", "user_id"),
+            source,
+            ("notification_id", "user_id"),
+        )
+        == 0
+    )
+    await session.commit()
+    from sqlalchemy import func
+
+    assert await session.scalar(select(func.count()).select_from(NotificationSeen)) == 1
