@@ -155,27 +155,26 @@ def main() -> None:
     )
     arguments = parser.parse_args()
     configuration = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    declaration = configuration["tool"]["poetry"]
+    declaration = configuration["project"]
     project = PackageMetadata(
         name=declaration["name"],
         version=declaration["version"],
-        python=declaration["dependencies"]["python"],
-        module=declaration["packages"][0]["include"],
+        python=declaration["requires-python"],
+        module=configuration["tool"]["poetry"]["packages"][0]["include"],
         dependencies=frozenset(
-            canonical_name(name)
-            for name in declaration["dependencies"]
-            if name != "python"
+            canonical_name(re.split(r"[\s\[<>=!~;(]", requirement, maxsplit=1)[0])
+            for requirement in declaration["dependencies"]
         ),
     )
     version = project.version
     require(
         version == configuration["tool"]["commitizen"]["version"],
-        "Poetry and Commitizen versions differ",
+        "Project and Commitizen versions differ",
     )
     require(
         configuration["tool"]["semantic_release"]["version_toml"]
-        == ["pyproject.toml:tool.poetry.version"],
-        "Semantic-release must use the Poetry version",
+        == ["pyproject.toml:project.version"],
+        "Semantic-release must use the project version",
     )
     require((ROOT / declaration["readme"]).is_file(), "Declared README is missing")
     require((ROOT / "LICENCE").is_file(), "License file is missing")

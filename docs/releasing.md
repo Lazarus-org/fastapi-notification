@@ -22,7 +22,7 @@ and [GitHub environment configuration](https://docs.github.com/en/actions/how-to
 
 ## Release procedure
 
-1. Review and merge the release changes. Keep the Poetry and Commitizen versions
+1. Review and merge the release changes. Keep the project and Commitizen versions
    aligned in `pyproject.toml`, and finalize the changelog. The current intended
    release remains `1.0.0`.
 2. Run `python scripts/check_packaging.py` and `poetry check --lock`.
