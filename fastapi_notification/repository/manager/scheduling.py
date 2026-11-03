@@ -1,7 +1,9 @@
 """Scheduler-agnostic quiet-hours and digest scheduling data access."""
 
+import re
 from datetime import datetime, time, timedelta, timezone
 from typing import Any, List, Optional
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, select, update
@@ -20,6 +22,26 @@ from fastapi_notification.models.notification_quiet_hours import (
 )
 from fastapi_notification.models.state import insert_if_absent
 from fastapi_notification.utils.sqlalchemy import execute_dml
+
+_ERROR_CODE_PATTERN = re.compile(r"[a-z][a-z0-9_.-]{0,63}\Z")
+
+
+def _validate_claim_token(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError("claim_token must be a UUID string.")
+    try:
+        return str(UUID(value))
+    except (ValueError, AttributeError) as exc:
+        raise ValueError("claim_token must be a valid UUID string.") from exc
+
+
+def _validate_error_code(value: object) -> str:
+    if not isinstance(value, str) or not _ERROR_CODE_PATTERN.fullmatch(value):
+        raise ValueError(
+            "error_code must be a lowercase identifier containing 1 to 64 "
+            "letters, digits, dots, underscores or hyphens, and start with a letter."
+        )
+    return value
 
 
 def _require_aware(value: datetime) -> datetime:
@@ -407,6 +429,7 @@ class NotificationSchedulingDataAccessLayer:
         if not isinstance(stale_after, timedelta) or stale_after.total_seconds() <= 0:
             raise ValueError("stale_after must be a positive timedelta.")
         stale_before = now - stale_after
+        claim_token = str(uuid4())
         result = await execute_dml(
             self.session,
             update(NotificationDigestBatch)
@@ -425,41 +448,57 @@ class NotificationSchedulingDataAccessLayer:
                 status="processing",
                 attempts=NotificationDigestBatch.attempts + 1,
                 claimed_at=now,
-                last_error=None,
+                claim_token=claim_token,
+                last_error_code=None,
             ),
         )
         if not result.rowcount:
             return None
         await self.session.flush()
-        return await self.session.get(NotificationDigestBatch, batch_id)
+        batch = await self.session.get(NotificationDigestBatch, batch_id)
+        if batch is not None:
+            await self.session.refresh(batch)
+        return batch
 
-    async def mark_batch_sent(self, batch_id: int) -> bool:
+    async def mark_batch_sent(self, batch_id: int, *, claim_token: str) -> bool:
+        claim_token = _validate_claim_token(claim_token)
         result = await execute_dml(
             self.session,
             update(NotificationDigestBatch)
             .where(
                 NotificationDigestBatch.id == batch_id,
                 NotificationDigestBatch.status == "processing",
+                NotificationDigestBatch.claim_token == claim_token,
             )
             .values(
                 status="sent",
                 sent_at=datetime.now(timezone.utc),
-                last_error=None,
+                claimed_at=None,
+                claim_token=None,
+                last_error_code=None,
             ),
         )
         return bool(result.rowcount)
 
-    async def mark_batch_failed(self, batch_id: int, error: str) -> bool:
-        if not isinstance(error, str) or not error.strip():
-            raise ValueError("error must be a non-empty string.")
+    async def mark_batch_failed(
+        self, batch_id: int, error_code: str, *, claim_token: str
+    ) -> bool:
+        error_code = _validate_error_code(error_code)
+        claim_token = _validate_claim_token(claim_token)
         result = await execute_dml(
             self.session,
             update(NotificationDigestBatch)
             .where(
                 NotificationDigestBatch.id == batch_id,
                 NotificationDigestBatch.status == "processing",
+                NotificationDigestBatch.claim_token == claim_token,
             )
-            .values(status="failed", last_error=error[:4000]),
+            .values(
+                status="failed",
+                claimed_at=None,
+                claim_token=None,
+                last_error_code=error_code,
+            ),
         )
         return bool(result.rowcount)
 
@@ -468,17 +507,25 @@ class NotificationSchedulingDataAccessLayer:
         batch_id: int,
         *,
         until: datetime,
+        claim_token: str,
     ) -> bool:
-        """Return a claimed batch to pending until a quiet window ends."""
+        """Return an owned batch to pending until a quiet window ends."""
         until = _require_aware(until)
+        claim_token = _validate_claim_token(claim_token)
         result = await execute_dml(
             self.session,
             update(NotificationDigestBatch)
             .where(
                 NotificationDigestBatch.id == batch_id,
                 NotificationDigestBatch.status == "processing",
+                NotificationDigestBatch.claim_token == claim_token,
             )
-            .values(status="pending", available_at=until, claimed_at=None),
+            .values(
+                status="pending",
+                available_at=until,
+                claimed_at=None,
+                claim_token=None,
+            ),
         )
         return bool(result.rowcount)
 

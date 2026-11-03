@@ -3,6 +3,7 @@
 from datetime import date, datetime, time, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, cast
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import Boolean, Date, String, select
@@ -174,8 +175,8 @@ async def test_scheduler_lease_retry_and_update_contracts(
     )
     with pytest.raises(ValueError):
         await dal.claim_batch(1, stale_after=timedelta(0))
-    with pytest.raises(ValueError):
-        await dal.mark_batch_failed(1, " ")
+    with pytest.raises(ValueError, match="error_code"):
+        await dal.mark_batch_failed(1, " ", claim_token=str(uuid4()))
     with pytest.raises(TypeError):
         await NotificationPreferenceDataAccessLayer(session).set_preference(
             user, enabled=cast(Any, "yes")

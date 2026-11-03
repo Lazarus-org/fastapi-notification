@@ -12,7 +12,6 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    Text,
     Time,
     UniqueConstraint,
 )
@@ -104,8 +103,9 @@ class NotificationDigestBatch(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     claimed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    claim_token: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     available_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
-    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utcnow, nullable=False
     )

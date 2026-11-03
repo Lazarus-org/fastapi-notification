@@ -114,27 +114,38 @@ Before sending, claim the batch atomically:
 .. code-block:: python
 
    batch = await scheduling.claim_batch(batch_id)
-   if batch is None:
+   if batch is None or batch.claim_token is None:
        return  # another worker owns it, or it is not due
 
+   claim_token = batch.claim_token
    release_at = await scheduling.next_allowed_at(user, channel=batch.channel)
    if release_at is not None:
-       await scheduling.defer_batch(batch.id, until=release_at)
+       await scheduling.defer_batch(
+           batch.id, until=release_at, claim_token=claim_token
+       )
        await session.commit()
        return
 
    try:
        # Pass str(batch.id) as the provider's idempotency key when supported.
        await provider.send_digest(user, batch, idempotency_key=str(batch.id))
-   except Exception as exc:
-       await scheduling.mark_batch_failed(batch.id, str(exc))
+   except Exception:
+       # Persist a stable code, never raw provider exception text or secrets.
+       await scheduling.mark_batch_failed(
+           batch.id, "provider_delivery_failed", claim_token=claim_token
+       )
    else:
-       await scheduling.mark_batch_sent(batch.id)
+       await scheduling.mark_batch_sent(batch.id, claim_token=claim_token)
    await session.commit()
 
-Batch states are ``pending``, ``processing``, ``sent`` and ``failed``. Failed
-batches can be retried. A processing lease older than the default 15 minutes
-can be reclaimed by another worker. This is an at-least-once delivery contract:
+Batch states are ``pending``, ``processing``, ``sent`` and ``failed``. Each
+successful claim returns a fresh UUID ``claim_token``. Every completion operation
+(``mark_batch_sent``, ``mark_batch_failed`` and ``defer_batch``) requires that
+token; stale workers cannot finalize a batch after another worker reclaims it.
+The token is cleared when the claim is completed, failed or deferred. A processing
+lease older than the default 15 minutes can be reclaimed by another worker.
+Failure handling stores a validated, non-sensitive ``error_code`` rather than raw
+provider exception text. This is an at-least-once delivery contract:
 a worker may crash after a provider accepts a message but before the database
 records success. Use the stable batch ID as a provider idempotency key where
 the provider supports it. The package cannot guarantee exactly-once delivery

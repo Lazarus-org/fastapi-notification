@@ -305,12 +305,69 @@ async def test_digest_claims_and_due_generation_use_independent_sessions(
         batch = await session.get(NotificationDigestBatch, batch_id)
         assert batch.status == "processing"
         assert batch.attempts == 1
+        assert batch.claim_token is not None
         assert (
             await session.scalar(
                 select(func.count()).select_from(NotificationDigestBatch)
             )
             == 1
         )
+
+
+async def test_stale_digest_worker_cannot_finalize_reclaimed_batch(
+    concurrency_store: Any,
+) -> None:
+    from datetime import datetime, time, timedelta, timezone
+
+    from fastapi_notification.models.notification_digest import NotificationDigestBatch
+    from fastapi_notification.repository.manager.scheduling import (
+        NotificationSchedulingDataAccessLayer,
+    )
+
+    factory, user_id, _ = concurrency_store
+    start = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
+    async with factory() as session:
+        schedule = await NotificationSchedulingDataAccessLayer(
+            session
+        ).set_digest_schedule(user_id, local_time=time(9), now=start)
+        due = schedule.next_run_at
+        batch = (
+            await NotificationSchedulingDataAccessLayer(session).create_due_batches(
+                now=due
+            )
+        )[0]
+        batch_id = batch.id
+        await session.commit()
+
+    async with factory() as session:
+        first = await NotificationSchedulingDataAccessLayer(session).claim_batch(
+            batch_id, now=due
+        )
+        assert first is not None and first.claim_token is not None
+        first_token = first.claim_token
+        await session.commit()
+
+    async with factory() as session:
+        second = await NotificationSchedulingDataAccessLayer(session).claim_batch(
+            batch_id, now=due + timedelta(minutes=16)
+        )
+        assert second is not None and second.claim_token is not None
+        second_token = second.claim_token
+        assert second_token != first_token
+        await session.commit()
+
+    async with factory() as session:
+        dal = NotificationSchedulingDataAccessLayer(session)
+        assert await dal.mark_batch_sent(batch_id, claim_token=first_token) is False
+        await session.commit()
+
+    async with factory() as session:
+        dal = NotificationSchedulingDataAccessLayer(session)
+        assert await dal.mark_batch_sent(batch_id, claim_token=second_token) is True
+        await session.commit()
+        batch = await session.get(NotificationDigestBatch, batch_id)
+        assert batch is not None and batch.status == "sent"
+        assert batch.claim_token is None
 
 
 async def test_concurrent_seen_and_deletion_preserve_hidden_inbox(

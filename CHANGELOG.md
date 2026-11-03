@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### Final 1.0.0 release hardening
+
+- Add per-claim UUID ownership tokens to digest batches; stale workers cannot mark a
+  reclaimed batch sent, failed or deferred.
+- Clear lease ownership when a batch leaves the processing state.
+- Persist validated, non-sensitive digest failure codes instead of raw provider
+  exception messages.
+- Add a reference Alembic migration for existing digest batch tables.
+
+
 ### Issue 17.1 release hardening
 
 - Support Python 3.11–3.15; drop Python 3.9/3.10 by maintainer decision. Package, Commitizen and semantic-release remain aligned on intended version 1.0.0.

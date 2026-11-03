@@ -110,9 +110,11 @@ async def test_digest_batch_claim_and_complete_are_state_guarded(
     batch = (await dal.create_due_batches(now=schedule.next_run_at))[0]
     claimed = await dal.claim_batch(batch.id, now=schedule.next_run_at)
     assert claimed is not None and claimed.attempts == 1
+    assert claimed.claim_token is not None
+    claim_token = claimed.claim_token
     assert await dal.claim_batch(batch.id, now=schedule.next_run_at) is None
-    assert await dal.mark_batch_sent(batch.id) is True
-    assert await dal.mark_batch_sent(batch.id) is False
+    assert await dal.mark_batch_sent(batch.id, claim_token=claim_token) is True
+    assert await dal.mark_batch_sent(batch.id, claim_token=claim_token) is False
 
 
 async def test_failed_digest_batch_can_be_retried(
@@ -124,8 +126,14 @@ async def test_failed_digest_batch_can_be_retried(
         user, local_time=time(9), timezone_name="UTC", now=now
     )
     batch = (await dal.create_due_batches(now=schedule.next_run_at))[0]
-    assert await dal.claim_batch(batch.id, now=schedule.next_run_at)
-    assert await dal.mark_batch_failed(batch.id, "provider unavailable")
+    claimed = await dal.claim_batch(batch.id, now=schedule.next_run_at)
+    assert claimed is not None and claimed.claim_token is not None
+    assert await dal.mark_batch_failed(
+        batch.id, "provider_unavailable", claim_token=claimed.claim_token
+    )
+    failed = await session.get(NotificationDigestBatch, batch.id)
+    assert failed is not None and failed.last_error_code == "provider_unavailable"
+    assert failed.claim_token is None
     retry = await dal.claim_batch(
         batch.id, now=schedule.next_run_at + timedelta(minutes=1)
     )
@@ -136,6 +144,9 @@ def test_scheduling_models_are_registered() -> None:
     assert NotificationQuietHours.__tablename__ == "notification_quiet_hours"
     assert NotificationDigestSchedule.__tablename__ == "notification_digest_schedule"
     assert NotificationDigestBatch.__tablename__ == "notification_digest_batch"
+    assert "claim_token" in NotificationDigestBatch.__table__.columns
+    assert "last_error_code" in NotificationDigestBatch.__table__.columns
+    assert "last_error" not in NotificationDigestBatch.__table__.columns
 
 
 async def test_disabled_exact_quiet_rule_overrides_enabled_wildcard(
@@ -191,9 +202,12 @@ async def test_deferred_batch_is_not_claimable_until_available(
         user, local_time=time(9), timezone_name="UTC", now=now
     )
     batch = (await dal.create_due_batches(now=schedule.next_run_at))[0]
-    assert await dal.claim_batch(batch.id, now=schedule.next_run_at)
+    claimed = await dal.claim_batch(batch.id, now=schedule.next_run_at)
+    assert claimed is not None and claimed.claim_token is not None
     release_at = schedule.next_run_at + timedelta(hours=2)
-    assert await dal.defer_batch(batch.id, until=release_at)
+    assert await dal.defer_batch(
+        batch.id, until=release_at, claim_token=claimed.claim_token
+    )
     assert (
         await dal.claim_batch(batch.id, now=schedule.next_run_at + timedelta(hours=1))
         is None
@@ -210,12 +224,31 @@ async def test_abandoned_processing_batch_can_be_reclaimed(
         user, local_time=time(9), timezone_name="UTC", now=now
     )
     batch = (await dal.create_due_batches(now=schedule.next_run_at))[0]
-    assert await dal.claim_batch(batch.id, now=schedule.next_run_at)
+    first_claim = await dal.claim_batch(batch.id, now=schedule.next_run_at)
+    assert first_claim is not None and first_claim.claim_token is not None
+    first_token = first_claim.claim_token
     reclaimed = await dal.claim_batch(
         batch.id, now=schedule.next_run_at + timedelta(minutes=16)
     )
-    assert reclaimed is not None
+    assert reclaimed is not None and reclaimed.claim_token is not None
     assert reclaimed.attempts == 2
+    assert reclaimed.claim_token != first_token
+    assert await dal.mark_batch_sent(batch.id, claim_token=first_token) is False
+    assert (
+        await dal.mark_batch_failed(batch.id, "stale_worker", claim_token=first_token)
+        is False
+    )
+    assert (
+        await dal.defer_batch(
+            batch.id,
+            until=schedule.next_run_at + timedelta(hours=1),
+            claim_token=first_token,
+        )
+        is False
+    )
+    assert (
+        await dal.mark_batch_sent(batch.id, claim_token=reclaimed.claim_token) is True
+    )
 
 
 async def test_quiet_hours_reset_is_idempotent(
@@ -274,3 +307,45 @@ async def test_quiet_end_in_second_dst_fold_is_in_the_future(
     assert await dal.next_allowed_at(user, channel="email", at=at) == datetime(
         2026, 11, 1, 6, 30, tzinfo=timezone.utc
     )
+
+
+async def test_digest_failure_stores_only_validated_error_code(
+    session: AsyncSession, user: User
+) -> None:
+    dal = NotificationSchedulingDataAccessLayer(session)
+    now = datetime(2026, 11, 2, 8, tzinfo=timezone.utc)
+    schedule = await dal.set_digest_schedule(
+        user, local_time=time(9), timezone_name="UTC", now=now
+    )
+    batch = (await dal.create_due_batches(now=schedule.next_run_at))[0]
+    claimed = await dal.claim_batch(batch.id, now=schedule.next_run_at)
+    assert claimed is not None and claimed.claim_token is not None
+
+    with pytest.raises(ValueError, match="error_code"):
+        await dal.mark_batch_failed(
+            batch.id,
+            "provider failed: authorization=secret-token",
+            claim_token=claimed.claim_token,
+        )
+
+    assert await dal.mark_batch_failed(
+        batch.id, "provider_unavailable", claim_token=claimed.claim_token
+    )
+    await session.refresh(batch)
+    assert batch.last_error_code == "provider_unavailable"
+    assert "secret-token" not in (batch.last_error_code or "")
+
+
+def test_digest_claim_token_and_error_code_validation() -> None:
+    from fastapi_notification.repository.manager.scheduling import (
+        _validate_claim_token,
+        _validate_error_code,
+    )
+
+    with pytest.raises(TypeError, match="claim_token"):
+        _validate_claim_token(None)
+    with pytest.raises(ValueError, match="claim_token"):
+        _validate_claim_token("not-a-uuid")
+    with pytest.raises(ValueError, match="error_code"):
+        _validate_error_code(None)
+    assert _validate_error_code("provider.timeout-1") == "provider.timeout-1"
