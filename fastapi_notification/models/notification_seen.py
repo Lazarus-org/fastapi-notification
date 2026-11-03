@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from fastapi_notification.identity import get_identity_adapter
 from fastapi_notification.models.base import Base, utcnow
+from fastapi_notification.models.column_types import opaque_identifier
 from fastapi_notification.models.permissions.notification_permission import (
     NotificationPermission,
 )
@@ -42,7 +43,7 @@ class NotificationSeen(Base):
     notification_id: Mapped[int] = mapped_column(
         ForeignKey("notification.id", ondelete="CASCADE"), nullable=False
     )
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[str] = mapped_column(opaque_identifier(), nullable=False)
     seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

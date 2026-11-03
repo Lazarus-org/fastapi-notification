@@ -5,9 +5,14 @@ from typing import Any
 import pytest
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi_notification.models.auth import User
 from fastapi_notification.models.base import Base
 from fastapi_notification.models.notification_seen import NotificationSeen
+from fastapi_notification.repository.manager.notification import (
+    NotificationDataAccessLayer,
+)
 
 
 async def test_schema_constraints_indexes_and_foreign_key_enforcement(
@@ -149,3 +154,133 @@ async def test_permanent_deletion_cleans_all_associations(
         )
         == 1
     )
+
+
+@pytest.mark.parametrize(
+    "left,right", [("HostUser", "hostuser"), ("cafe", "café"), ("user", "user ")]
+)
+async def test_opaque_recipient_identifiers_remain_distinct(
+    session: AsyncSession,
+    dal: NotificationDataAccessLayer,
+    user: User,
+    left: str,
+    right: str,
+) -> None:
+    """Database collation must not grant another opaque identity inbox access."""
+    first = await dal.create_notification(
+        verb="first inbox", actor=user, recipients=left, is_sent=True
+    )
+    second = await dal.create_notification(
+        verb="second inbox", actor=user, recipients=right, is_sent=True
+    )
+    await session.commit()
+    assert [row.id for row in await dal.sent(recipients=left, display_detail=True)] == [
+        first.id
+    ]
+    assert [
+        row.id for row in await dal.sent(recipients=right, display_detail=True)
+    ] == [second.id]
+
+
+@pytest.mark.parametrize(
+    "left_scope,right_scope,left_key,right_key",
+    [
+        ("Tenant", "tenant", "event", "event"),
+        ("tenant", "tenant", "Event", "event"),
+    ],
+)
+async def test_opaque_deduplication_scopes_and_keys_remain_distinct(
+    session: AsyncSession,
+    dal: NotificationDataAccessLayer,
+    user: User,
+    left_scope: str,
+    right_scope: str,
+    left_key: str,
+    right_key: str,
+) -> None:
+    first = await dal.create_notification(
+        verb="first event",
+        actor=user,
+        deduplication_scope=left_scope,
+        deduplication_key=left_key,
+    )
+    second = await dal.create_notification(
+        verb="second event",
+        actor=user,
+        deduplication_scope=right_scope,
+        deduplication_key=right_key,
+    )
+    await session.commit()
+    assert first.id != second.id
+
+
+async def test_opaque_identity_settings_and_group_isolation(
+    session: AsyncSession,
+    dal: NotificationDataAccessLayer,
+    user: User,
+) -> None:
+    from datetime import time
+
+    from fastapi_notification.repository.manager.preferences import (
+        NotificationPreferenceDataAccessLayer,
+    )
+    from fastapi_notification.repository.manager.scheduling import (
+        NotificationSchedulingDataAccessLayer,
+    )
+
+    preferences = NotificationPreferenceDataAccessLayer(session)
+    await preferences.set_preference(
+        "HostUser", category="orders", channel="email", enabled=False
+    )
+    await preferences.set_preference(
+        "hostuser", category="orders", channel="email", enabled=True
+    )
+    assert (
+        await preferences.is_enabled("HostUser", category="orders", channel="email")
+        is False
+    )
+    assert (
+        await preferences.is_enabled("hostuser", category="orders", channel="email")
+        is True
+    )
+    scheduling = NotificationSchedulingDataAccessLayer(session)
+    await scheduling.set_quiet_hours("HostUser", start_time=time(22), end_time=time(7))
+    assert await scheduling.list_quiet_hours("hostuser") == []
+    first = await dal.create_notification(
+        verb="upper group", actor=user, groups="Operations", is_sent=True
+    )
+    second = await dal.create_notification(
+        verb="lower group", actor=user, groups="operations", is_sent=True
+    )
+    await session.commit()
+    assert [
+        row.id for row in await dal.sent(groups="Operations", display_detail=True)
+    ] == [first.id]
+    assert [
+        row.id for row in await dal.sent(groups="operations", display_detail=True)
+    ] == [second.id]
+
+
+async def test_utc_and_local_time_microseconds_round_trip(
+    session: AsyncSession, dal: NotificationDataAccessLayer, user: User
+) -> None:
+    from datetime import datetime, time, timezone
+
+    from fastapi_notification.repository.manager.scheduling import (
+        NotificationSchedulingDataAccessLayer,
+    )
+
+    instant = datetime(2030, 1, 2, 3, 4, 5, 123456, tzinfo=timezone.utc)
+    notification = await dal.create_notification(
+        verb="precise expiry", actor=user, expires_at=instant
+    )
+    scheduling = NotificationSchedulingDataAccessLayer(session)
+    quiet = await scheduling.set_quiet_hours(
+        user, start_time=time(22, 0, 0, 123456), end_time=time(7, 0, 0, 654321)
+    )
+    await session.commit()
+    await session.refresh(notification)
+    await session.refresh(quiet)
+    assert notification.expires_at == instant
+    assert quiet.start_time == time(22, 0, 0, 123456)
+    assert quiet.end_time == time(7, 0, 0, 654321)

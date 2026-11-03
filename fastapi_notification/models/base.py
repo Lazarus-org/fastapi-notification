@@ -6,6 +6,8 @@ from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.types import TypeDecorator
 
+from fastapi_notification.models.column_types import precise_datetime
+
 
 def utcnow() -> datetime:
     """Return the current time as a timezone aware UTC datetime.
@@ -31,7 +33,7 @@ class UTCDateTime(
     bind values to UTC and attaching UTC to naive database results.
     """
 
-    impl = DateTime(timezone=True)
+    impl = precise_datetime()
     cache_ok = True
 
     def process_bind_param(self, value: object, dialect: Dialect) -> Optional[datetime]:

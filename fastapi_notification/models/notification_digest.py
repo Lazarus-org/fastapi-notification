@@ -19,6 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fastapi_notification.models.base import Base, UTCDateTime, utcnow
+from fastapi_notification.models.column_types import opaque_identifier, precise_time
 
 
 class NotificationDigestSchedule(Base):
@@ -42,10 +43,12 @@ class NotificationDigestSchedule(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(
+        opaque_identifier(), nullable=False, index=True
+    )
     channel: Mapped[str] = mapped_column(String(64), nullable=False, default="email")
     frequency: Mapped[str] = mapped_column(String(8), nullable=False, default="daily")
-    local_time: Mapped[time] = mapped_column(Time, nullable=False)
+    local_time: Mapped[time] = mapped_column(precise_time(), nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
     weekday: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -91,7 +94,9 @@ class NotificationDigestBatch(Base):
         ForeignKey("notification_digest_schedule.id", ondelete="SET NULL"),
         nullable=True,
     )
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(
+        opaque_identifier(), nullable=False, index=True
+    )
     channel: Mapped[str] = mapped_column(String(64), nullable=False)
     scheduled_for: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     period_start: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)

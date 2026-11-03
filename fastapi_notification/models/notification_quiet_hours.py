@@ -9,6 +9,7 @@ from sqlalchemy import Boolean, CheckConstraint, Integer, String, Time, UniqueCo
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fastapi_notification.models.base import Base, UTCDateTime, utcnow
+from fastapi_notification.models.column_types import opaque_identifier, precise_time
 
 
 def validate_timezone(value: str) -> str:
@@ -35,10 +36,12 @@ class NotificationQuietHours(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(
+        opaque_identifier(), nullable=False, index=True
+    )
     channel: Mapped[str] = mapped_column(String(64), nullable=False, default="*")
-    start_time: Mapped[time] = mapped_column(Time, nullable=False)
-    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    start_time: Mapped[time] = mapped_column(precise_time(), nullable=False)
+    end_time: Mapped[time] = mapped_column(precise_time(), nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     allow_urgent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

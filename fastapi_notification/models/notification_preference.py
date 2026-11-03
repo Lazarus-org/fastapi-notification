@@ -9,6 +9,7 @@ from sqlalchemy import Boolean, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fastapi_notification.models.base import Base, UTCDateTime, utcnow
+from fastapi_notification.models.column_types import opaque_identifier
 
 _KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 
@@ -43,7 +44,7 @@ class NotificationPreference(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[str] = mapped_column(opaque_identifier(), nullable=False)
     category: Mapped[str] = mapped_column(String(64), nullable=False, default="*")
     channel: Mapped[str] = mapped_column(String(64), nullable=False, default="*")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

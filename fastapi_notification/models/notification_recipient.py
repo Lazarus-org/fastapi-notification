@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from fastapi_notification.identity import get_identity_adapter
 from fastapi_notification.models.base import Base
+from fastapi_notification.models.column_types import opaque_identifier
 from fastapi_notification.utils.username import get_username
 
 
@@ -28,7 +29,7 @@ class NotificationRecipient(Base):
     notification_id: Mapped[int] = mapped_column(
         ForeignKey("notification.id", ondelete="CASCADE"), nullable=False
     )
-    recipient_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    recipient_id: Mapped[str] = mapped_column(opaque_identifier(), nullable=False)
 
     def __str__(self) -> str:
         """Return a description of the recipient association.
