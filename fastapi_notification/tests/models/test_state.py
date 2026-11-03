@@ -22,6 +22,73 @@ from fastapi_notification.tests.typing_helpers import session_double
 pytestmark = pytest.mark.models
 
 
+def test_mysql_native_insert_requires_an_autoincrement_key() -> None:
+    from sqlalchemy import Column, MetaData, String, Table
+
+    from fastapi_notification.models.state import _mysql_insert
+
+    fake = session_double(
+        SimpleNamespace(get_bind=lambda: SimpleNamespace(dialect=mysql.dialect()))
+    )
+
+    class Unsupported:
+        __table__ = Table(
+            "opaque_pk", MetaData(), Column("id", String(32), primary_key=True)
+        )
+
+    assert _mysql_insert(fake, Unsupported, {}) is None
+    statement = _mysql_insert(
+        fake, NotificationSeen, {"notification_id": 1, "user_id": "42"}
+    )
+    assert statement is not None
+    assert "ON DUPLICATE KEY UPDATE id = notification_seen.id" in str(
+        statement.compile(dialect=mysql.dialect())
+    )
+
+
+@pytest.mark.parametrize("lastrowid,found", [(1, True), (0, True), (0, False)])
+async def test_mysql_native_result_uses_lastrowid_and_checks_natural_key(
+    lastrowid: int, found: bool
+) -> None:
+    """FOUND_ROWS cannot distinguish duplicates; lastrowid and a key lookup can."""
+    from sqlalchemy.exc import IntegrityError
+
+    sentinel = object()
+
+    class FakeSession:
+        calls = 0
+
+        def get_bind(self) -> object:
+            return SimpleNamespace(dialect=mysql.dialect())
+
+        async def execute(self, statement: object) -> object:
+            self.calls += 1
+            if self.calls == 1:
+                return SimpleNamespace(lastrowid=lastrowid, rowcount=1)
+            return SimpleNamespace(
+                scalar_one_or_none=lambda: sentinel if found else None
+            )
+
+    fake = session_double(FakeSession())
+    if not found:
+        with pytest.raises(IntegrityError, match="natural key"):
+            await insert_if_absent(
+                fake,
+                NotificationSeen,
+                {"notification_id": 1, "user_id": "42"},
+                ("notification_id", "user_id"),
+            )
+    else:
+        row, inserted = await insert_if_absent(
+            fake,
+            NotificationSeen,
+            {"notification_id": 1, "user_id": "42"},
+            ("notification_id", "user_id"),
+        )
+        assert row is sentinel
+        assert inserted is bool(lastrowid)
+
+
 def test_dialect_insert_supports_postgresql_upsert() -> None:
     """The PostgreSQL strategy builds a native conflict-safe insert."""
     fake_session = SimpleNamespace(
@@ -54,6 +121,7 @@ async def test_insert_if_absent_uses_savepoint_fallback(
     from fastapi_notification.models import state
 
     monkeypatch.setattr(state, "_dialect_insert", lambda *_: None)
+    monkeypatch.setattr(state, "_mysql_insert", lambda *_: None)
     values = {"notification_id": notification.id, "user_id": str(user.id)}
 
     first, inserted_first = await insert_if_absent(
@@ -78,6 +146,7 @@ async def test_bulk_insert_fallback_is_idempotent(
     from fastapi_notification.models import state
 
     monkeypatch.setattr(state, "_dialect_insert", lambda *_: None)
+    monkeypatch.setattr(state, "_mysql_insert", lambda *_: None)
     source = select(literal(notification.id), literal(str(user.id)))
 
     first_count = await insert_many_from_select_if_absent(
@@ -119,6 +188,7 @@ async def test_insert_if_absent_reraises_non_duplicate_integrity_errors(
     from fastapi_notification.models import state
 
     monkeypatch.setattr(state, "_dialect_insert", lambda *_: None)
+    monkeypatch.setattr(state, "_mysql_insert", lambda *_: None)
     with pytest.raises(IntegrityError):
         await insert_if_absent(
             session,
@@ -141,6 +211,7 @@ async def test_bulk_fallback_rolls_back_the_whole_batch_on_failure(
     from fastapi_notification.models import state
 
     monkeypatch.setattr(state, "_dialect_insert", lambda *_: None)
+    monkeypatch.setattr(state, "_mysql_insert", lambda *_: None)
     source = select(literal(notification.id), literal(str(user.id))).union_all(
         select(literal(notification.id), literal(None))
     )
@@ -204,7 +275,7 @@ def test_mysql_duplicate_lookup_uses_a_current_read() -> None:
         (NotificationSeen.notification_id == 1, NotificationSeen.user_id == "42"),
     )
 
-    assert "FOR UPDATE" in str(statement.compile(dialect=mysql.dialect()))
+    assert "LOCK IN SHARE MODE" in str(statement.compile(dialect=mysql.dialect()))
 
 
 async def test_native_bulk_insert_accepts_union_sources(

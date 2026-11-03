@@ -2,7 +2,9 @@
 
 from typing import Any, Mapping, Sequence, Tuple, Type, Union
 
-from sqlalchemy import select, true
+from sqlalchemy import Integer, select, true
+from sqlalchemy.dialects.mysql import Insert as MySQLInsert
+from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.postgresql import Insert as PostgreSQLInsert
 from sqlalchemy.dialects.sqlite import Insert as SQLiteInsert
 from sqlalchemy.exc import IntegrityError
@@ -35,9 +37,54 @@ def _existing_row_statement(
     statement = select(model).where(*criteria)
     if session.get_bind().dialect.name in {"mysql", "mariadb"}:
         # InnoDB REPEATABLE READ can hide a concurrently committed duplicate
-        # from a snapshot read. FOR UPDATE performs a current/locking read.
-        statement = statement.with_for_update()
+        # from a snapshot read. A shared current read also avoids upgrading the
+        # shared duplicate-key lock left by the portable savepoint fallback.
+        statement = statement.with_for_update(read=True)
     return statement
+
+
+def _mysql_insert(
+    session: AsyncSession, model: Type[Any], values: Mapping[str, Any]
+) -> Union[MySQLInsert, None]:
+    """Build a no-op duplicate update for an auto-increment integer primary key."""
+    if session.get_bind().dialect.name != "mysql":
+        return None
+    primary_key = model.__table__.autoincrement_column
+    if primary_key is None or not isinstance(primary_key.type, Integer):
+        return None
+    # Acquire the duplicate row's exclusive lock during INSERT, rather than
+    # upgrading shared locks concurrently after an IntegrityError. Do not assign
+    # LAST_INSERT_ID(id): the unchanged-row lastrowid=0 identifies a duplicate.
+    return (
+        mysql_insert(model)
+        .values(**dict(values))
+        .on_duplicate_key_update({primary_key.key: primary_key})
+    )
+
+
+async def _mysql_insert_or_existing(
+    session: AsyncSession,
+    model: Type[Any],
+    values: Mapping[str, Any],
+    criteria: Sequence[Any],
+) -> Union[Tuple[Any, bool], None]:
+    """Serialize MySQL duplicate writes without ending the caller's transaction."""
+    statement = _mysql_insert(session, model, values)
+    if statement is None:
+        return None
+    result = await execute_dml(session, statement)
+    existing_result = await session.execute(
+        _existing_row_statement(session, model, criteria)
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing is None:
+        # A different unique constraint must not silently suppress an insert.
+        raise IntegrityError(
+            str(statement),
+            dict(values),
+            ValueError("Conflicting row does not match the requested natural key."),
+        )
+    return existing, bool(result.lastrowid)
 
 
 async def insert_if_absent(
@@ -49,9 +96,10 @@ async def insert_if_absent(
     """Atomically insert a row or return the row that already exists.
 
     SQLite and PostgreSQL use their native ``ON CONFLICT DO NOTHING`` support.
-    Other dialects use a savepoint and the database unique constraint as the
-    concurrency arbiter. MySQL duplicate recovery uses a current read to avoid
-    stale repeatable-read snapshots. The caller retains ownership of the
+    MySQL uses a native no-op duplicate update for auto-increment integer keys;
+    other models and dialects use a savepoint and the database unique constraint.
+    MySQL-family duplicate recovery uses shared current reads to avoid stale
+    repeatable-read snapshots. The caller retains ownership of the
     outer transaction; this helper never commits or rolls it back.
 
     Returns:
@@ -64,6 +112,9 @@ async def insert_if_absent(
             natural key, or if the conflicting row cannot be found afterwards.
     """
     criteria = [getattr(model, column) == values[column] for column in unique_columns]
+    mysql_result = await _mysql_insert_or_existing(session, model, values, criteria)
+    if mysql_result is not None:
+        return mysql_result
     dialect_statement = _dialect_insert(session, model)
 
     if dialect_statement is not None:
