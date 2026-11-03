@@ -19,7 +19,6 @@
 - Clear lease ownership when a batch leaves the processing state.
 - Persist validated, non-sensitive digest failure codes instead of raw provider
   exception messages.
-- Add a reference Alembic migration for existing digest batch tables.
 
 
 ### Issue 17.1 release hardening
@@ -27,9 +26,9 @@
 - Support Python 3.11–3.15; drop Python 3.9/3.10 by maintainer decision. Package, Commitizen and semantic-release remain aligned on intended version 1.0.0.
 - Recover formatting, documentation, Pylint and mypy checks without lowering quality thresholds.
 - Preserve compound SELECT sources in SQLite conflict-safe bulk inserts.
-- Preserve opaque identity comparisons and microsecond precision on MySQL 8.4; provide a guarded reference schema migration.
+- Preserve opaque identity comparisons and microsecond precision on MySQL 8.4.
 - Serialize MySQL duplicate state insertion without shared-lock upgrade deadlocks at REPEATABLE READ, retaining caller transaction ownership.
-- Add real database and migration regressions, optional database test dependencies, and reproducible validation evidence.
+- Add real database regressions, optional database test dependencies, and reproducible validation evidence.
 
 
 ### Issue 17 validation fixes

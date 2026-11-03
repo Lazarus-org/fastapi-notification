@@ -36,8 +36,8 @@ Python 3.9 and 3.10 are outside the supported range for the 1.0.0 release.
 Database integration targets are SQLite (`aiosqlite`), PostgreSQL 17 (`asyncpg`)
 and MySQL 8.4 LTS with InnoDB (`aiomysql`). Install the asynchronous driver for
 your chosen database separately. Other database engines require application
-validation. Existing MySQL schemas need the
-[identity and temporal precision migration](migrations/README.md).
+validation. For this first release, create fresh tables from the package
+metadata or incorporate that metadata into your application's migration system.
 
 ## Documentation
 

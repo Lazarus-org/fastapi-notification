@@ -179,5 +179,6 @@ See the GitHub Actions results for executed CI checks and the
 
 The first public release is intended to be 1.0.0. Metadata describes that intended
 stable release; local validation does not publish or authorize publishing it.
-Python 3.9/3.10 are outside the supported range. See `migrations/README.md`
-before upgrading an existing database schema.
+Python 3.9/3.10 are outside the supported range. The first release targets fresh
+schemas; applications manage schema creation through the package metadata or
+their own migration system.

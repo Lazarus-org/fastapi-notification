@@ -114,7 +114,7 @@ def check_wheel(path: Path, project: PackageMetadata, production: list[Path]) ->
 
 
 def check_sdist(path: Path, project: PackageMetadata, production: list[Path]) -> None:
-    """Verify sdist metadata and the included reference migrations."""
+    """Verify sdist metadata and production source bytes."""
     with tarfile.open(path) as archive:
         names = archive.getnames()
         require(
@@ -134,12 +134,7 @@ def check_sdist(path: Path, project: PackageMetadata, production: list[Path]) ->
         require(len(metadata) == 1, "Expected one top-level sdist PKG-INFO file")
         check_metadata(read_tar_member(archive, metadata[0]), project, "sdist")
         prefix = metadata[0].split("/")[0]
-        migrations = [
-            path
-            for path in (ROOT / "migrations").rglob("*")
-            if path.suffix in {".py", ".md"} and "__pycache__" not in path.parts
-        ]
-        for source in [*production, *migrations]:
+        for source in production:
             name = prefix + "/" + source.relative_to(ROOT).as_posix()
             require(
                 name in names and read_tar_member(archive, name) == source.read_bytes(),

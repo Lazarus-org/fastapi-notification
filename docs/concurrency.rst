@@ -66,5 +66,5 @@ MySQL schema types
 Opaque user/group identifiers and deduplication scopes/keys use MySQL 8.4's
 ``utf8mb4_0900_bin`` NO PAD collation. Case, accents and trailing spaces remain
 significant, matching application identity semantics. UTCDateTime and local
-wall times retain six fractional digits. Existing schemas require the guarded
-reference revision in ``migrations/``; no migration runs automatically.
+wall times retain six fractional digits. Fresh schemas created from the package
+metadata use these types. Applications own their schema migration process.

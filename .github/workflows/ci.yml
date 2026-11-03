@@ -97,7 +97,7 @@ jobs:
       - run: poetry sync --with dev,database --no-interaction
       - name: PostgreSQL runtime and independent sessions
         run: poetry run pytest fastapi_notification/tests --database-url postgresql+asyncpg://notification:notification@127.0.0.1:5432/notification_test --no-cov --junitxml=postgresql.xml
-      - name: MySQL runtime, REPEATABLE READ races and reference migration
+      - name: MySQL runtime and REPEATABLE READ races
         run: poetry run pytest fastapi_notification/tests --database-url mysql+aiomysql://notification:notification@127.0.0.1:3306/notification_test --no-cov --junitxml=mysql.xml
       - uses: actions/upload-artifact@v4
         if: always()

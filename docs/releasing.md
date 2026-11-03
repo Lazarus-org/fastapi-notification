@@ -43,6 +43,6 @@ The release build job also runs the clean-wheel smoke test on that artifact.
 Reusable CI skips its duplicate distribution job for release calls; normal
 push/PR CI continues to build and check distributions itself.
 
-Before migrating existing digest batch tables, stop digest workers and review
-the reference migrations in `migrations/README.md` for the host application's
-revision chain. Migration and worker deployment are application responsibilities.
+The first release targets fresh schemas and includes no pre-release upgrade
+migrations. Applications create notification tables from the package metadata
+or manage schema creation through their own migration system.
