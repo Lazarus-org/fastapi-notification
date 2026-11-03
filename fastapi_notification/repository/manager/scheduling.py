@@ -13,12 +13,10 @@ from fastapi_notification.models.notification_digest import (
     NotificationDigestBatch,
     NotificationDigestSchedule,
 )
+from fastapi_notification.models.notification_preference import normalize_preference_key
 from fastapi_notification.models.notification_quiet_hours import (
     NotificationQuietHours,
     validate_timezone,
-)
-from fastapi_notification.models.notification_preference import (
-    normalize_preference_key,
 )
 from fastapi_notification.models.state import insert_if_absent
 
@@ -30,7 +28,11 @@ def _require_aware(value: datetime) -> datetime:
 
 
 def _next_run(
-    *, after: datetime, frequency: str, local_time: time, timezone_name: str,
+    *,
+    after: datetime,
+    frequency: str,
+    local_time: time,
+    timezone_name: str,
     weekday: Optional[int],
 ) -> datetime:
     """Calculate the next wall-clock schedule instant after an aware instant."""
@@ -77,8 +79,14 @@ class NotificationSchedulingDataAccessLayer:
         return list(result.scalars().all())
 
     async def set_quiet_hours(
-        self, user: Any, *, start_time: time, end_time: time,
-        timezone_name: str = "UTC", channel: str = "*", enabled: bool = True,
+        self,
+        user: Any,
+        *,
+        start_time: time,
+        end_time: time,
+        timezone_name: str = "UTC",
+        channel: str = "*",
+        enabled: bool = True,
         allow_urgent: bool = True,
     ) -> NotificationQuietHours:
         if not isinstance(start_time, time) or not isinstance(end_time, time):
@@ -92,13 +100,18 @@ class NotificationSchedulingDataAccessLayer:
         channel = normalize_preference_key(channel, allow_wildcard=True)
         timezone_name = validate_timezone(timezone_name)
         values = {
-            "user_id": self._user_id(user), "channel": channel,
-            "start_time": start_time, "end_time": end_time,
-            "timezone": timezone_name, "enabled": enabled,
+            "user_id": self._user_id(user),
+            "channel": channel,
+            "start_time": start_time,
+            "end_time": end_time,
+            "timezone": timezone_name,
+            "enabled": enabled,
             "allow_urgent": allow_urgent,
         }
         row, _ = await insert_if_absent(
-            self.session, NotificationQuietHours, values,
+            self.session,
+            NotificationQuietHours,
+            values,
             ("user_id", "channel"),
         )
         for key, value in values.items():
@@ -118,7 +131,11 @@ class NotificationSchedulingDataAccessLayer:
         return bool(result.rowcount)
 
     async def is_quiet(
-        self, user: Any, *, channel: str, at: Optional[datetime] = None,
+        self,
+        user: Any,
+        *,
+        channel: str,
+        at: Optional[datetime] = None,
         priority: str = "normal",
     ) -> bool:
         """Return whether delivery is currently inside a matching quiet window."""
@@ -147,7 +164,11 @@ class NotificationSchedulingDataAccessLayer:
         return current >= start or current < end
 
     async def next_allowed_at(
-        self, user: Any, *, channel: str, at: Optional[datetime] = None,
+        self,
+        user: Any,
+        *,
+        channel: str,
+        at: Optional[datetime] = None,
         priority: str = "normal",
     ) -> Optional[datetime]:
         """Return the UTC instant when the active quiet window ends, if any."""
@@ -182,7 +203,11 @@ class NotificationSchedulingDataAccessLayer:
         end_date = local.date()
         if start > end and current >= start:
             end_date += timedelta(days=1)
-        return datetime.combine(end_date, end, tzinfo=zone).astimezone(timezone.utc)
+        return (
+            datetime.combine(end_date, end, tzinfo=zone)
+            .replace(fold=local.fold)
+            .astimezone(timezone.utc)
+        )
 
     async def list_digest_schedules(
         self, user: Any
@@ -195,9 +220,16 @@ class NotificationSchedulingDataAccessLayer:
         return list(result.scalars().all())
 
     async def set_digest_schedule(
-        self, user: Any, *, channel: str = "email", frequency: str = "daily",
-        local_time: time, timezone_name: str = "UTC", weekday: Optional[int] = None,
-        enabled: bool = True, now: Optional[datetime] = None,
+        self,
+        user: Any,
+        *,
+        channel: str = "email",
+        frequency: str = "daily",
+        local_time: time,
+        timezone_name: str = "UTC",
+        weekday: Optional[int] = None,
+        enabled: bool = True,
+        now: Optional[datetime] = None,
     ) -> NotificationDigestSchedule:
         channel = normalize_preference_key(channel)
         timezone_name = validate_timezone(timezone_name)
@@ -215,14 +247,21 @@ class NotificationSchedulingDataAccessLayer:
             raise TypeError("enabled must be a boolean.")
         now = _require_aware(now or datetime.now(timezone.utc))
         next_run = _next_run(
-            after=now, frequency=frequency, local_time=local_time,
-            timezone_name=timezone_name, weekday=weekday,
+            after=now,
+            frequency=frequency,
+            local_time=local_time,
+            timezone_name=timezone_name,
+            weekday=weekday,
         )
         values = {
-            "user_id": self._user_id(user), "channel": channel,
-            "frequency": frequency, "local_time": local_time,
-            "timezone": timezone_name, "weekday": weekday,
-            "enabled": enabled, "next_run_at": next_run,
+            "user_id": self._user_id(user),
+            "channel": channel,
+            "frequency": frequency,
+            "local_time": local_time,
+            "timezone": timezone_name,
+            "weekday": weekday,
+            "enabled": enabled,
+            "next_run_at": next_run,
         }
         row, inserted = await insert_if_absent(
             self.session,
@@ -265,7 +304,10 @@ class NotificationSchedulingDataAccessLayer:
         return bool(result.rowcount)
 
     async def create_due_batches(
-        self, *, now: Optional[datetime] = None, limit: int = 100,
+        self,
+        *,
+        now: Optional[datetime] = None,
+        limit: int = 100,
     ) -> List[NotificationDigestBatch]:
         """Create idempotent batches for due schedules; does not send them.
 
@@ -344,7 +386,10 @@ class NotificationSchedulingDataAccessLayer:
         return batches
 
     async def claim_batch(
-        self, batch_id: int, *, now: Optional[datetime] = None,
+        self,
+        batch_id: int,
+        *,
+        now: Optional[datetime] = None,
         stale_after: timedelta = timedelta(minutes=15),
     ) -> Optional[NotificationDigestBatch]:
         """Atomically claim a batch, reclaiming abandoned processing leases.
@@ -365,8 +410,10 @@ class NotificationSchedulingDataAccessLayer:
                     (NotificationDigestBatch.status.in_(["pending", "failed"]))
                     & (NotificationDigestBatch.available_at <= now)
                 )
-                | ((NotificationDigestBatch.status == "processing")
-                   & (NotificationDigestBatch.claimed_at <= stale_before)),
+                | (
+                    (NotificationDigestBatch.status == "processing")
+                    & (NotificationDigestBatch.claimed_at <= stale_before)
+                ),
             )
             .values(
                 status="processing",
@@ -409,7 +456,10 @@ class NotificationSchedulingDataAccessLayer:
         return bool(result.rowcount)
 
     async def defer_batch(
-        self, batch_id: int, *, until: datetime,
+        self,
+        batch_id: int,
+        *,
+        until: datetime,
     ) -> bool:
         """Return a claimed batch to pending until a quiet window ends."""
         until = _require_aware(until)
@@ -424,7 +474,10 @@ class NotificationSchedulingDataAccessLayer:
         return bool(result.rowcount)
 
     async def list_pending_batches(
-        self, *, limit: int = 100, now: Optional[datetime] = None,
+        self,
+        *,
+        limit: int = 100,
+        now: Optional[datetime] = None,
     ) -> List[NotificationDigestBatch]:
         if (
             not isinstance(limit, int)

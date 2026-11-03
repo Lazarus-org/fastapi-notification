@@ -1,15 +1,15 @@
 """Database-backed tests for quiet-hour and digest scheduling DAL."""
 
 from datetime import datetime, time, timedelta, timezone
+from typing import Any
 
 import pytest
 
 from fastapi_notification.models.notification_digest import (
-    NotificationDigestBatch, NotificationDigestSchedule,
+    NotificationDigestBatch,
+    NotificationDigestSchedule,
 )
-from fastapi_notification.models.notification_quiet_hours import (
-    NotificationQuietHours,
-)
+from fastapi_notification.models.notification_quiet_hours import NotificationQuietHours
 from fastapi_notification.repository.manager.scheduling import (
     NotificationSchedulingDataAccessLayer,
 )
@@ -18,22 +18,40 @@ from fastapi_notification.repository.manager.scheduling import (
 async def test_quiet_hours_support_overnight_windows(session, user):
     dal = NotificationSchedulingDataAccessLayer(session)
     await dal.set_quiet_hours(
-        user, channel="email", start_time=time(22), end_time=time(7),
-        timezone_name="UTC", allow_urgent=True,
+        user,
+        channel="email",
+        start_time=time(22),
+        end_time=time(7),
+        timezone_name="UTC",
+        allow_urgent=True,
     )
-    assert await dal.is_quiet(
-        user, channel="email", at=datetime(2026, 11, 2, 23, tzinfo=timezone.utc)
-    ) is True
-    assert await dal.is_quiet(
-        user, channel="email", at=datetime(2026, 11, 2, 6, tzinfo=timezone.utc)
-    ) is True
-    assert await dal.is_quiet(
-        user, channel="email", at=datetime(2026, 11, 2, 12, tzinfo=timezone.utc)
-    ) is False
-    assert await dal.is_quiet(
-        user, channel="email", at=datetime(2026, 11, 2, 23, tzinfo=timezone.utc),
-        priority="urgent",
-    ) is False
+    assert (
+        await dal.is_quiet(
+            user, channel="email", at=datetime(2026, 11, 2, 23, tzinfo=timezone.utc)
+        )
+        is True
+    )
+    assert (
+        await dal.is_quiet(
+            user, channel="email", at=datetime(2026, 11, 2, 6, tzinfo=timezone.utc)
+        )
+        is True
+    )
+    assert (
+        await dal.is_quiet(
+            user, channel="email", at=datetime(2026, 11, 2, 12, tzinfo=timezone.utc)
+        )
+        is False
+    )
+    assert (
+        await dal.is_quiet(
+            user,
+            channel="email",
+            at=datetime(2026, 11, 2, 23, tzinfo=timezone.utc),
+            priority="urgent",
+        )
+        is False
+    )
 
 
 async def test_quiet_hours_return_next_allowed_instant(session, user):
@@ -109,16 +127,27 @@ def test_scheduling_models_are_registered():
 async def test_disabled_exact_quiet_rule_overrides_enabled_wildcard(session, user):
     dal = NotificationSchedulingDataAccessLayer(session)
     await dal.set_quiet_hours(
-        user, channel="*", start_time=time(22), end_time=time(7),
-        timezone_name="UTC", enabled=True,
+        user,
+        channel="*",
+        start_time=time(22),
+        end_time=time(7),
+        timezone_name="UTC",
+        enabled=True,
     )
     await dal.set_quiet_hours(
-        user, channel="email", start_time=time(22), end_time=time(7),
-        timezone_name="UTC", enabled=False,
+        user,
+        channel="email",
+        start_time=time(22),
+        end_time=time(7),
+        timezone_name="UTC",
+        enabled=False,
     )
-    assert await dal.is_quiet(
-        user, channel="email", at=datetime(2026, 11, 2, 23, tzinfo=timezone.utc)
-    ) is False
+    assert (
+        await dal.is_quiet(
+            user, channel="email", at=datetime(2026, 11, 2, 23, tzinfo=timezone.utc)
+        )
+        is False
+    )
 
 
 async def test_schedule_removal_preserves_created_digest_batch(session, user):
@@ -145,9 +174,10 @@ async def test_deferred_batch_is_not_claimable_until_available(session, user):
     assert await dal.claim_batch(batch.id, now=schedule.next_run_at)
     release_at = schedule.next_run_at + timedelta(hours=2)
     assert await dal.defer_batch(batch.id, until=release_at)
-    assert await dal.claim_batch(
-        batch.id, now=schedule.next_run_at + timedelta(hours=1)
-    ) is None
+    assert (
+        await dal.claim_batch(batch.id, now=schedule.next_run_at + timedelta(hours=1))
+        is None
+    )
     assert await dal.claim_batch(batch.id, now=release_at) is not None
 
 
@@ -199,3 +229,20 @@ async def test_due_batch_creation_catches_up_missed_daily_periods(session, user)
     assert len(batches) == 3
     assert [batch.scheduled_for.day for batch in batches] == [2, 3, 4]
     assert schedule.next_run_at == datetime(2026, 11, 5, 9, tzinfo=timezone.utc)
+
+
+async def test_quiet_end_in_second_dst_fold_is_in_the_future(
+    session: Any, user: Any
+) -> None:
+    dal = NotificationSchedulingDataAccessLayer(session)
+    await dal.set_quiet_hours(
+        user,
+        start_time=time(0),
+        end_time=time(1, 30),
+        timezone_name="America/New_York",
+    )
+    at = datetime(2026, 11, 1, 6, 15, tzinfo=timezone.utc)
+    assert await dal.is_quiet(user, channel="email", at=at)
+    assert await dal.next_allowed_at(user, channel="email", at=at) == datetime(
+        2026, 11, 1, 6, 30, tzinfo=timezone.utc
+    )

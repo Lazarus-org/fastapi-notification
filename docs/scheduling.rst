@@ -142,3 +142,18 @@ across an external provider and the application's database transaction.
 
 ``create_due_batches`` and all state transitions participate in the caller's
 transaction. The package never commits on behalf of the host application.
+
+
+Daylight-saving policy
+----------------------
+
+Recurring schedules select the first occurrence (``fold=0``) of an ambiguous
+local wall-clock time. A nonexistent local time is interpreted with the offset
+before the transition, moving delivery forward by the size of the gap. Each
+local calendar date is scheduled once; advancing after the first occurrence
+does not create a second batch for the repeated hour. The next normal period
+returns to the configured local wall-clock time.
+
+Quiet-hour checks use the actual occurrence of the current local time. When
+a quiet window ends in an ambiguous hour, its end uses that occurrence's fold,
+so a second-fold delivery is never deferred to an instant already in the past.
