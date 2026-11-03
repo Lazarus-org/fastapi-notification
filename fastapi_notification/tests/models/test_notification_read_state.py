@@ -15,12 +15,12 @@ from fastapi_notification.repository.manager.notification import (
 pytestmark = [pytest.mark.models, pytest.mark.models_notification]
 
 
-async def _seen_count(
-    session: AsyncSession, notification_id: int, user_id: int
-) -> int:
+async def _seen_count(session: AsyncSession, notification_id: int, user_id: int) -> int:
     """Count a specific user's seen record for one notification."""
     result = await session.execute(
-        select(func.count()).select_from(NotificationSeen).where(
+        select(func.count())
+        .select_from(NotificationSeen)
+        .where(
             NotificationSeen.notification_id == notification_id,
             NotificationSeen.user_id == str(user_id),
         )
@@ -35,7 +35,7 @@ async def test_mark_as_unseen_removes_the_current_users_seen_state(
     await notification.mark_as_seen(session, user)
     await session.commit()
     await notification.load_identities(session)
-    assert [identity.id for identity in notification.seen_by] == [user.id]
+    assert [identity.id for identity in notification.seen_by] == [str(user.id)]
 
     changed = await notification.mark_as_unseen(session, user)
     await session.commit()
@@ -169,6 +169,7 @@ async def test_mark_as_unseen_does_not_commit_the_callers_transaction(
     await session.commit()
 
     await notification.mark_as_unseen(session, user)
+    notification_id, user_id = notification.id, user.id
     await session.rollback()
 
-    assert await _seen_count(session, notification.id, user.id) == 1
+    assert await _seen_count(session, notification_id, user_id) == 1

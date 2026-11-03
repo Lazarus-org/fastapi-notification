@@ -8,7 +8,6 @@ from fastapi_notification.repository.manager.preferences import (
 )
 
 
-
 async def test_preferences_default_to_enabled(session, user):
     dal = NotificationPreferenceDataAccessLayer(session)
     assert await dal.is_enabled(user, category="orders", channel="email") is True
@@ -61,12 +60,8 @@ async def test_reset_restores_inherited_default(session, user):
     dal = NotificationPreferenceDataAccessLayer(session)
     await dal.set_preference(user, category="orders", channel="email", enabled=False)
 
-    assert await dal.reset_preference(
-        user, category="orders", channel="email"
-    ) is True
-    assert await dal.reset_preference(
-        user, category="orders", channel="email"
-    ) is False
+    assert await dal.reset_preference(user, category="orders", channel="email") is True
+    assert await dal.reset_preference(user, category="orders", channel="email") is False
     assert await dal.is_enabled(user, category="orders", channel="email") is True
 
 
@@ -98,7 +93,7 @@ async def test_preferences_do_not_change_existing_inbox_notifications(
     )
 
     visible = await dal.sent(recipients=user)
-    assert [item.id for item in visible] == [notification.id]
+    assert [item["id"] for item in visible] == [notification.id]
 
 
 async def test_preference_model_is_registered():
