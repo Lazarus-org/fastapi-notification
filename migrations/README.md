@@ -31,3 +31,20 @@ are carried through each alteration.
 The tests in `test_mysql_migration.py` execute upgrade/downgrade and both rollback
 rejections against the disposable database selected with `--database-url`.
 Never point that test option at an application database: fixtures drop tables.
+
+## Digest claim ownership hardening
+
+`versions/20261103_digest_claim_ownership.py` is a reference Alembic revision
+for existing Issue 16/17 digest-batch tables. Attach it to the host application's
+revision chain and inspect the resulting DDL before applying it. Stop all digest
+workers before upgrading. The revision adds a nullable UUID claim token and a
+bounded error-code column, maps existing non-empty raw error messages to the
+non-sensitive code `delivery_failed`, resets in-flight `processing` batches to
+`pending`, and removes the raw error-text column. The reset ensures workers using
+the old protocol cannot finalize batches after the schema transition. The
+migration is not run automatically by package installation.
+
+Downgrade recreates the legacy error-text column from the sanitized code and
+removes claim-token support. It cannot restore raw provider exception messages
+that were intentionally discarded during upgrade. Do not run the downgrade
+while workers using the claim-token protocol are active.
