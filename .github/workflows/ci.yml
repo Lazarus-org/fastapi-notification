@@ -6,6 +6,11 @@ on:
     branches: [main]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      distribution_in_release:
+        description: The release build job validates its own distribution artifact
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -50,11 +55,11 @@ jobs:
       - run: python -m pip install poetry==2.5.1
       - run: poetry check --lock
       - run: poetry sync --with dev --no-interaction
-      - run: poetry run black --check fastapi_notification
-      - run: poetry run isort --check-only fastapi_notification
-      - run: poetry run docformatter --check --recursive --wrap-summaries 88 --wrap-descriptions 88 fastapi_notification
-      - run: poetry run pylint fastapi_notification --rcfile=pyproject.toml
-      - run: poetry run mypy fastapi_notification
+      - run: poetry run black --check fastapi_notification scripts/check_packaging.py
+      - run: poetry run isort --check-only fastapi_notification scripts/check_packaging.py
+      - run: poetry run docformatter --check --recursive --wrap-summaries 88 --wrap-descriptions 88 fastapi_notification scripts/check_packaging.py
+      - run: poetry run pylint fastapi_notification scripts/check_packaging.py --rcfile=pyproject.toml
+      - run: poetry run mypy fastapi_notification scripts/check_packaging.py
       - run: poetry run bandit -c pyproject.toml -r fastapi_notification
       - run: poetry run pip check
   databases:
@@ -102,6 +107,7 @@ jobs:
             postgresql.xml
             mysql.xml
   distribution:
+    if: ${{ !inputs.distribution_in_release }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -110,7 +116,9 @@ jobs:
           python-version: "3.15"
       - run: python -m pip install poetry==2.5.1
       - run: poetry check --lock
+      - run: python scripts/check_packaging.py
       - run: poetry build
+      - run: python scripts/check_packaging.py --dist-dir dist
       - name: Clean wheel installation and FastAPI persistence smoke test
         run: |
           python -m venv "$RUNNER_TEMP/clean-wheel"

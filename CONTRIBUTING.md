@@ -174,10 +174,10 @@ Use `poetry sync --with dev,database` for server integration. Both
 `--database-url` and tox's `NOTIFICATION_TEST_DATABASE_URL` must point to a
 disposable database: fixtures create and drop package tables. CI provides
 PostgreSQL 17.5 and MySQL 8.4 service containers with public test credentials.
-See `validation/issue17-1/REPORT.md` for executed results and limitations; hosted
-GitHub Actions is NOT TESTED until an actual hosted run occurs.
+See the GitHub Actions results for executed CI checks and the
+[release guide](docs/releasing.md) for tag validation and Trusted Publishing.
 
 The first public release is intended to be 1.0.0. Metadata describes that intended
 stable release; local validation does not publish or authorize publishing it.
-Python 3.9/3.10 exploratory results remain historical evidence and confer no
-support commitment. See `migrations/README.md` before upgrading an existing MySQL schema.
+Python 3.9/3.10 are outside the supported range. See `migrations/README.md`
+before upgrading an existing database schema.

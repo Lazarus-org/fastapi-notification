@@ -1,8 +1,89 @@
-name: Release validation (no publishing)
+name: Release
+
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
 permissions:
   contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  validate:
+  verify-and-build:
+    name: Validate tag and build distributions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install Poetry
+        run: python -m pip install poetry==2.5.1
+      - name: Verify release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/check_packaging.py --tag "$RELEASE_TAG"
+      - name: Validate distribution metadata
+        run: |
+          poetry check --lock
+          python scripts/check_packaging.py
+      - name: Build package
+        run: poetry build
+      - name: Verify package files
+        run: |
+          python scripts/check_packaging.py --dist-dir dist
+          python -m venv "$RUNNER_TEMP/release-tools"
+          "$RUNNER_TEMP/release-tools/bin/python" -m pip install twine==7.0.0
+          "$RUNNER_TEMP/release-tools/bin/python" -m twine check --strict dist/*
+      - name: Validate the release wheel in a clean environment
+        run: |
+          python -m venv "$RUNNER_TEMP/clean-wheel"
+          "$RUNNER_TEMP/clean-wheel/bin/python" -m pip install dist/*.whl aiosqlite
+          "$RUNNER_TEMP/clean-wheel/bin/python" -m pip check
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/clean-wheel/bin/python" -I "$GITHUB_WORKSPACE/scripts/wheel_smoke.py"
+      - uses: actions/upload-artifact@v7
+        id: upload
+        with:
+          name: release-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  test-release:
+    name: Full release validation
     uses: ./.github/workflows/ci.yml
+    with:
+      distribution_in_release: true
+
+  publish:
+    name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/') && vars.PYPI_PUBLISH_ENABLED == 'true'
+    needs: [verify-and-build, test-release]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/fastapi-notification/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.verify-and-build.outputs.artifact-id }}
+          path: dist
+          merge-multiple: true
+      - name: Publish using PyPI Trusted Publisher
+        uses: pypa/gh-action-pypi-publish@release/v1
