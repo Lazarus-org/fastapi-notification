@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## [Unreleased]
+
+## [1.0.0] - 2026-11-03
+
+### Release automation
+
+- Validate release tags against package metadata before building distributions.
+- Check wheel and source contents, strict Twine metadata, and clean-wheel runtime
+  behavior before uploading the release artifact.
+- Require full reusable CI before publishing the verified artifact through PyPI
+  Trusted Publishing and the configured GitHub `pypi` environment.
+
 ### Final 1.0.0 release hardening
 
 - Add per-claim UUID ownership tokens to digest batches; stale workers cannot mark a
@@ -33,8 +45,6 @@
 - Recover regression fixtures and add scheduling API, timezone and independent-session digest tests.
 - Extend CI and tox interpreter coverage through Python 3.15.
 
-
-## [Unreleased]
 
 ### Added
 - Per-user, channel-specific quiet hours with IANA timezone support, overnight windows, and configurable urgent-notification bypass.
@@ -168,10 +178,6 @@
   recreate development tables before upgrading. Existing status values and
   stored status data are unchanged.
 
----
-
-## v1.0.0 (2026-07-20)
-
 ### ✨ Features
 
 - **models**: Add async SQLAlchemy 2.0 models for notifications, recipients, seen records and soft deletions.
@@ -194,8 +200,6 @@
 - Digest delivery is at-least-once. Use the stable digest batch ID as a provider idempotency key where supported.
 - Existing databases require creation of the quiet-hours, digest-schedule, and digest-batch tables.
 
-
-## Unreleased
 
 ### Added
 
