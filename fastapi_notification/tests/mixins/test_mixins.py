@@ -25,7 +25,7 @@ def test_attributes_are_read_from_the_settings() -> None:
     host = Configurable()
     host.configure_attrs()
 
-    assert host.ordering_fields == ["id", "timestamp", "public"]
+    assert host.ordering_fields == ["id", "timestamp", "public", "category", "priority"]
     assert host.search_fields == ["verb", "description"]
     assert host.pagination_class is DefaultLimitOffSetPagination
 

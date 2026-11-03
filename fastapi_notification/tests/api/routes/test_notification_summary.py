@@ -32,9 +32,7 @@ async def test_summary_counts_total_unread_and_read(
 ) -> None:
     """Summary counts all visible sent notifications by the caller's read state."""
     await notifications[0].mark_as_seen(session, user)
-    await dal.delete_notification(
-        notifications[1].id, recipient=user, soft_delete=True
-    )
+    await dal.delete_notification(notifications[1].id, recipient=user, soft_delete=True)
     await session.commit()
     as_user(user)
 
@@ -294,6 +292,8 @@ async def test_preview_returns_recent_read_and_unread_items(
         "link",
         "timestamp",
         "expires_at",
+        "template_key",
+        "locale",
         "is_seen",
     }
 
@@ -302,6 +302,7 @@ async def test_preview_includes_category_and_priority(
     client: AsyncClient,
     dal: NotificationDataAccessLayer,
     user: User,
+    session: AsyncSession,
     as_user: Callable[[Any], None],
 ) -> None:
     """Preview exposes taxonomy values without changing notification status."""
@@ -314,6 +315,7 @@ async def test_preview_includes_category_and_priority(
         priority="urgent",
         is_sent=True,
     )
+    await session.commit()
     as_user(user)
 
     response = await client.get("/notifications/preview/")

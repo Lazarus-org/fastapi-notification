@@ -148,8 +148,7 @@ async def test_filtering_by_builtin_and_custom_category(
         "order"
     ]
     assert [
-        row.verb
-        for row in await run(dal, make_filter(category="com.example.billing"))
+        row.verb for row in await run(dal, make_filter(category="com.example.billing"))
     ] == ["billing"]
 
 
@@ -303,3 +302,22 @@ def test_a_configured_filterset_is_reported() -> None:
     )
 
     assert get_filterset(None) is NotificationFilter
+
+
+def test_direct_construction_has_plain_defaults() -> None:
+    """Dependency metadata must not become filter values in direct DAL use."""
+    from sqlalchemy import select
+
+    filterset = NotificationFilter()
+    statement = select(Notification)
+    assert filterset.filter_conditions() == []
+    assert filterset.search_condition() is None
+    assert filterset.apply_ordering(statement) is statement
+    assert str(filterset.filter_queryset(statement)) == str(statement)
+
+
+def test_partial_direct_construction_only_applies_explicit_filters() -> None:
+    filterset = NotificationFilter(category="security", priority="urgent")
+    assert len(filterset.filter_conditions()) == 2
+    assert filterset.search is None
+    assert filterset.ordering is None

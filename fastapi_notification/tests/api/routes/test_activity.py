@@ -72,9 +72,7 @@ async def test_staff_cannot_list_another_users_activity_even_with_legacy_seen_ro
 ) -> None:
     """A legacy seen record does not bypass the notification audience."""
     session.add(
-        NotificationSeen(
-            notification_id=notification.id, user_id=str(staff_user.id)
-        )
+        NotificationSeen(notification_id=notification.id, user_id=str(staff_user.id))
     )
     await session.commit()
     as_user(staff_user)
@@ -175,7 +173,7 @@ async def test_clear_notification_soft_deletes_it(
 async def test_get_cannot_soft_delete_an_activity(
     client: AsyncClient,
     dal: NotificationDataAccessLayer,
-    notification: Notification,
+    notifications: List[Notification],
     user: User,
     session: AsyncSession,
     as_user: Callable[[Any], None],
@@ -185,12 +183,13 @@ async def test_get_cannot_soft_delete_an_activity(
     as_user(user)
 
     response = await client.get(
-        f"/activities/{notification.id}/clear_notification/"
+        f"/activities/{notifications[0].id}/clear_notification/"
     )
 
     assert response.status_code == 405
     assert (await client.get("/activities/")).json()["count"] == 3
-    assert await session.get(Notification, notification.id) is not None
+    for notification in notifications:
+        assert await session.get(Notification, notification.id) is not None
 
 
 async def test_get_cannot_soft_delete_all_activities(
@@ -371,9 +370,7 @@ async def test_get_cannot_permanently_delete_notifications(
     notification_id = notification.id
 
     async with client_factory(API_INCLUDE_HARD_DELETE=True) as client:
-        single = await client.get(
-            f"/activities/{notification_id}/delete_notification/"
-        )
+        single = await client.get(f"/activities/{notification_id}/delete_notification/")
         bulk = await client.get("/activities/delete_activities/")
 
     assert single.status_code == 405

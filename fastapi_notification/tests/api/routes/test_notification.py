@@ -23,6 +23,7 @@ pytestmark = [
 
 def test_openapi_documents_state_changes_with_write_methods() -> None:
     """OpenAPI exposes POST/DELETE for state changes and no GET variants."""
+
     async def session_dependency() -> Any:
         yield None
 
@@ -43,20 +44,14 @@ def test_openapi_documents_state_changes_with_write_methods() -> None:
     paths = app.openapi()["paths"]
 
     assert set(paths["/notifications/mark_all_as_seen/"]) == {"post"}
-    assert set(paths["/notifications/{notification_id}/mark_as_seen/"]) == {
-        "post"
-    }
-    assert set(paths["/notifications/{notification_id}/mark_as_unseen/"]) == {
-        "post"
-    }
+    assert set(paths["/notifications/{notification_id}/mark_as_seen/"]) == {"post"}
+    assert set(paths["/notifications/{notification_id}/mark_as_unseen/"]) == {"post"}
     assert set(paths["/activities/clear_activities/"]) == {"delete"}
     assert set(paths["/activities/delete_activities/"]) == {"delete"}
-    assert set(
-        paths["/activities/{notification_id}/clear_notification/"]
-    ) == {"delete"}
-    assert set(
-        paths["/activities/{notification_id}/delete_notification/"]
-    ) == {"delete"}
+    assert set(paths["/activities/{notification_id}/clear_notification/"]) == {"delete"}
+    assert set(paths["/activities/{notification_id}/delete_notification/"]) == {
+        "delete"
+    }
     assert set(paths["/notifications/{notification_id}/"]) == {"get"}
     assert set(paths["/activities/{notification_id}/"]) == {"get"}
 
@@ -114,6 +109,8 @@ async def test_list_serves_summary_fields_to_regular_users(
         "link",
         "timestamp",
         "expires_at",
+        "template_key",
+        "locale",
     }
 
 
@@ -144,6 +141,8 @@ async def test_staff_get_the_same_default_representation_for_their_own_notificat
         "link",
         "timestamp",
         "expires_at",
+        "template_key",
+        "locale",
     }
 
 
@@ -239,15 +238,11 @@ async def test_post_marks_one_notification_as_seen(
     """The explicit POST action moves one notification into activities."""
     as_user(user)
 
-    get_response = await client.get(
-        f"/notifications/{notification.id}/mark_as_seen/"
-    )
+    get_response = await client.get(f"/notifications/{notification.id}/mark_as_seen/")
     assert get_response.status_code == 405
     assert (await client.get("/notifications/")).json()["count"] == 1
 
-    response = await client.post(
-        f"/notifications/{notification.id}/mark_as_seen/"
-    )
+    response = await client.post(f"/notifications/{notification.id}/mark_as_seen/")
 
     assert response.status_code == 204
     assert (await client.get("/notifications/")).json()["count"] == 0
@@ -325,9 +320,7 @@ async def test_group_member_can_mark_group_notification_as_seen(
     as_user(group_user)
 
     async with client_factory() as client:
-        response = await client.post(
-            f"/notifications/{notification.id}/mark_as_seen/"
-        )
+        response = await client.post(f"/notifications/{notification.id}/mark_as_seen/")
 
     assert response.status_code == 204
 
@@ -341,9 +334,7 @@ async def test_mark_as_seen_hides_another_users_notification(
     """The explicit state-changing action cannot bypass audience isolation."""
     as_user(other_user)
 
-    response = await client.post(
-        f"/notifications/{notification.id}/mark_as_seen/"
-    )
+    response = await client.post(f"/notifications/{notification.id}/mark_as_seen/")
 
     assert response.status_code == 404
 
@@ -471,6 +462,7 @@ async def test_staff_can_list_notifications_addressed_to_their_group(
     as_user: Callable[[Any], None],
 ) -> None:
     """Staff retain ordinary group-audience access without a global bypass."""
+    await session.refresh(staff_user, ["groups"])
     staff_user.groups.append(group)
     await dal.create_notification(
         verb="group announcement", actor=user, groups=group, is_sent=True
@@ -525,9 +517,7 @@ async def test_retrieval_can_be_switched_off(
 
     async with client_factory(API_ALLOW_RETRIEVE=False) as client:
         response = await client.get(f"/notifications/{notification.id}/")
-        mark_seen = await client.post(
-            f"/notifications/{notification.id}/mark_as_seen/"
-        )
+        mark_seen = await client.post(f"/notifications/{notification.id}/mark_as_seen/")
 
     assert response.status_code == 404
     assert mark_seen.status_code == 404

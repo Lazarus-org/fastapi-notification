@@ -70,7 +70,7 @@ def test_permission_serializer_renders_a_permission() -> None:
 
 
 async def test_notification_serializer_expands_related_objects(
-    notification: Notification, session: AsyncSession
+    notification: Notification, session: AsyncSession, user: User
 ) -> None:
     """A notification is rendered with its recipients and content types."""
     await session.refresh(notification)
@@ -88,7 +88,7 @@ async def test_notification_serializer_expands_related_objects(
 
 
 async def test_notification_serializer_can_drop_empty_fields(
-    notification: Notification, session: AsyncSession
+    notification: Notification, session: AsyncSession, user: User
 ) -> None:
     """Null fields can be stripped from the response."""
     configure(SERIALIZER_EXCLUDE_NULL_FIELDS=True)
@@ -145,7 +145,7 @@ def test_dynamic_serializer_titles_a_configured_row_by_its_string_form() -> None
 
 
 async def test_dynamic_serializer_reads_model_instances(
-    notification: Notification, session: AsyncSession
+    notification: Notification, session: AsyncSession, user: User
 ) -> None:
     """Whole notifications are rendered as readily as summary rows."""
     await session.refresh(notification)
@@ -196,9 +196,7 @@ def test_configured_helper_classes_are_used() -> None:
         USER_SERIALIZER_CLASS=(
             "fastapi_notification.api.schemas.group.PermissionSerializer"
         ),
-        GROUP_SERIALIZER_CLASS=(
-            "fastapi_notification.api.schemas.user.UserSerializer"
-        ),
+        GROUP_SERIALIZER_CLASS=("fastapi_notification.api.schemas.user.UserSerializer"),
     )
 
     assert user_serializer_class() is PermissionSerializer

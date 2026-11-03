@@ -23,7 +23,13 @@ def test_defaults_are_applied() -> None:
     assert config.include_hard_delete is False
     assert config.api_allow_list is True
     assert config.api_allow_retrieve is True
-    assert config.api_ordering_fields == ["id", "timestamp", "public"]
+    assert config.api_ordering_fields == [
+        "id",
+        "timestamp",
+        "public",
+        "category",
+        "priority",
+    ]
     assert config.api_search_fields == ["verb", "description"]
     assert config.user_serializer_fields == ["id"]
 

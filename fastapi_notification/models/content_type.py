@@ -248,7 +248,7 @@ class ContentType(Base):
 
         try:
             typed_object_id = coerce_object_id(model, object_id)
-        except (TypeError, ValueError, OverflowError):
+        except (ValueError, OverflowError):
             return None
 
         return await session.get(model, typed_object_id)

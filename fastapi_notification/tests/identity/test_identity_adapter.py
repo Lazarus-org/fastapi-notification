@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import create_engine, inspect
-
 import pytest
+from sqlalchemy import create_engine, inspect
 
 from fastapi_notification.identity import (
     IdentityAdapter,
@@ -244,7 +244,10 @@ async def test_hydrate_notification_identities_batches_all_associations():
 @pytest.mark.asyncio
 async def test_hydrate_notification_identities_preserves_unresolved_ids():
     """Unresolvable host records remain visible as ID-only references."""
-    from fastapi_notification.identity import IdentityAdapter, hydrate_notification_identities
+    from fastapi_notification.identity import (
+        IdentityAdapter,
+        hydrate_notification_identities,
+    )
     from fastapi_notification.models.notification import Notification
 
     class PartialAdapter(IdentityAdapter):
@@ -256,9 +259,7 @@ async def test_hydrate_notification_identities_preserves_unresolved_ids():
 
     configure(IDENTITY_ADAPTER=PartialAdapter)
     notification = Notification(id=22)
-    session = FakeSession(
-        [[(22, "missing-user")], [(22, "missing-group")], []]
-    )
+    session = FakeSession([[(22, "missing-user")], [(22, "missing-group")], []])
 
     await hydrate_notification_identities(session, [notification])
 
@@ -299,9 +300,9 @@ def test_resolved_identity_index_accepts_mapping_and_sequence_results():
     adapter = IdentityAdapter()
     reference = IdentityReference("sequence-user", "sequence-user", "sequence-user")
 
-    assert index_resolved_identities({"mapping-user": reference}, adapter.get_user_id) == {
-        "mapping-user": reference
-    }
+    assert index_resolved_identities(
+        {"mapping-user": reference}, adapter.get_user_id
+    ) == {"mapping-user": reference}
     assert index_resolved_identities([reference], adapter.get_user_id) == {
         "sequence-user": reference
     }
@@ -409,3 +410,20 @@ async def test_custom_adapter_can_resolve_snapshot_group_members():
     adapter = SnapshotAdapter()
     members = await adapter.get_group_user_ids(None, "engineering")
     assert members == ["user-1", "user-2"]
+
+
+@pytest.mark.asyncio
+async def test_group_resolution_loads_unloaded_relationship(
+    session: Any, group_user: Any, group: Any
+) -> None:
+    """Checking relationship presence must not trigger implicit async ORM I/O."""
+    session.expire(group_user, ["groups"])
+    assert "groups" in inspect(group_user).unloaded
+    assert await IdentityAdapter().get_user_group_ids(session, group_user) == [
+        str(group.id)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_group_resolution_accepts_identity_without_groups() -> None:
+    assert await IdentityAdapter().get_user_group_ids(None, object()) == []

@@ -38,23 +38,35 @@ def clean_settings() -> Iterator[None]:
     history.clear()
 
 
+def pytest_addoption(parser: Any) -> None:
+    parser.addoption(
+        "--database-url",
+        default="sqlite+aiosqlite:///:memory:",
+        help="Async URL for a disposable test database; package tables are dropped after each test.",
+    )
+
+
 @pytest_asyncio.fixture
-async def engine() -> AsyncIterator[AsyncEngine]:
+async def engine(request: Any) -> AsyncIterator[AsyncEngine]:
     """Provide an in-memory database with the package schema applied.
 
     Yields:
         AsyncEngine: The engine backing the test database.
 
     """
-    test_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    test_engine = create_async_engine(request.config.getoption("--database-url"))
 
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
         await connection.run_sync(AuthBase.metadata.create_all)
 
-    yield test_engine
-
-    await test_engine.dispose()
+    try:
+        yield test_engine
+    finally:
+        async with test_engine.begin() as connection:
+            await connection.run_sync(AuthBase.metadata.drop_all)
+            await connection.run_sync(Base.metadata.drop_all)
+        await test_engine.dispose()
 
 
 @pytest.fixture
@@ -238,7 +250,9 @@ async def superuser_only(session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def notification(dal: NotificationDataAccessLayer, user: User, session: AsyncSession) -> Any:
+async def notification(
+    dal: NotificationDataAccessLayer, user: User, session: AsyncSession
+) -> Any:
     """Create a sent notification addressed to the regular user.
 
     Args:

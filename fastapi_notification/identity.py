@@ -119,9 +119,6 @@ class IdentityAdapter:
         membership tables should override this method and query them using the
         supplied session.
         """
-        if not hasattr(user, self.user_groups_attribute):
-            return []
-
         await ensure_loaded(session, user, self.user_groups_attribute)
         groups = getattr(user, self.user_groups_attribute, None) or []
         return [self.get_group_id(group) for group in groups]
@@ -277,9 +274,7 @@ def get_identity_adapter() -> IdentityAdapter:
         "resolve_groups",
     )
     missing = [
-        name
-        for name in required_methods
-        if not callable(getattr(adapter, name, None))
+        name for name in required_methods if not callable(getattr(adapter, name, None))
     ]
     if missing:
         raise TypeError(
@@ -387,16 +382,12 @@ async def hydrate_notification_identities(
     for identifier in user_ids:
         users.setdefault(
             identifier,
-            IdentityReference(
-                id=identifier, username=identifier, name=identifier
-            ),
+            IdentityReference(id=identifier, username=identifier, name=identifier),
         )
     for identifier in group_ids:
         groups.setdefault(
             identifier,
-            IdentityReference(
-                id=identifier, username=identifier, name=identifier
-            ),
+            IdentityReference(id=identifier, username=identifier, name=identifier),
         )
 
     for notification in notifications:

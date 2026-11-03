@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Annotated, Any, List, Optional
 
 from fastapi import Query, Request
 from sqlalchemy import ColumnElement, Select, case, or_
@@ -25,46 +25,57 @@ class NotificationFilter:
 
     def __init__(
         self,
-        group__id: Optional[str] = Query(
-            None, description="Filter notifications sent to this group."
-        ),
-        recipient__id: Optional[str] = Query(
-            None, description="Filter notifications sent to this recipient."
-        ),
-        status: Optional[str] = Query(
-            None, description="Filter notifications by status."
-        ),
-        category: Optional[str] = Query(
-            None,
-            min_length=1,
-            max_length=64,
-            pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
-            description="Filter by a built-in or application-defined category key.",
-        ),
-        priority: Optional[str] = Query(
-            None,
-            pattern=r"^(low|normal|high|urgent)$",
-            description="Filter by priority: low, normal, high or urgent.",
-        ),
-        public: Optional[bool] = Query(
-            None, description="Filter notifications by public visibility."
-        ),
-        timestamp_after: Optional[datetime] = Query(
-            None, description="Only notifications created at or after this time."
-        ),
-        timestamp_before: Optional[datetime] = Query(
-            None, description="Only notifications created at or before this time."
-        ),
-        search: Optional[str] = Query(
-            None, description="Search across the configured search fields."
-        ),
-        ordering: Optional[str] = Query(
-            None,
-            description=(
-                "Order by one of the configured fields. Prefix with '-' to sort"
-                " descending."
+        group__id: Annotated[
+            Optional[str], Query(description="Filter notifications sent to this group.")
+        ] = None,
+        recipient__id: Annotated[
+            Optional[str],
+            Query(description="Filter notifications sent to this recipient."),
+        ] = None,
+        status: Annotated[
+            Optional[str], Query(description="Filter notifications by status.")
+        ] = None,
+        category: Annotated[
+            Optional[str],
+            Query(
+                min_length=1,
+                max_length=64,
+                pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+                description="Filter by a built-in or application-defined category key.",
             ),
-        ),
+        ] = None,
+        priority: Annotated[
+            Optional[str],
+            Query(
+                pattern=r"^(low|normal|high|urgent)$",
+                description="Filter by priority: low, normal, high or urgent.",
+            ),
+        ] = None,
+        public: Annotated[
+            Optional[bool],
+            Query(description="Filter notifications by public visibility."),
+        ] = None,
+        timestamp_after: Annotated[
+            Optional[datetime],
+            Query(description="Only notifications created at or after this time."),
+        ] = None,
+        timestamp_before: Annotated[
+            Optional[datetime],
+            Query(description="Only notifications created at or before this time."),
+        ] = None,
+        search: Annotated[
+            Optional[str],
+            Query(description="Search across the configured search fields."),
+        ] = None,
+        ordering: Annotated[
+            Optional[str],
+            Query(
+                description=(
+                    "Order by one of the configured fields. Prefix with '-' to sort"
+                    " descending."
+                ),
+            ),
+        ] = None,
     ) -> None:
         self.group__id = group__id
         self.recipient__id = recipient__id
