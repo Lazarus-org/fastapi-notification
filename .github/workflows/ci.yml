@@ -1,76 +1,124 @@
 name: CI
-
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
 jobs:
   test:
-    name: Test on Python ${{ matrix.python-version }}
+    name: Python ${{ matrix.python }} / SQLite / 100% coverage
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-
+        python: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install Poetry
-        run: pipx install poetry
-
-      - name: Install dependencies
-        run: poetry install --no-interaction
-
-      - name: Run the test suite
-        run: poetry run pytest
-
-      - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.12'
-        uses: codecov/codecov-action@v4
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install poetry==2.5.1
+      - run: poetry check --lock
+      - run: poetry sync --with dev --no-interaction
+      - run: poetry run pytest fastapi_notification/tests --cov-report=term-missing --cov-report=json:coverage.json --junitxml=tests.xml
+      - name: Minimum framework combination
+        if: matrix.python == '3.11'
+        run: |
+          poetry run pip install fastapi==0.110.0 'sqlalchemy[asyncio]==2.0.30' pydantic==2.7.0 pydantic-settings==2.3.0
+          poetry run pip check
+          poetry run pytest fastapi_notification/tests --cov-report=term-missing --cov-report=json:minimum-coverage.json --junitxml=minimum-tests.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-
-  lint:
-    name: Lint and type check
+          name: python-${{ matrix.python }}
+          path: |
+            tests.xml
+            coverage.json
+            minimum-tests.xml
+            minimum-coverage.json
+  quality:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-
-      - name: Install Poetry
-        run: pipx install poetry
-
-      - name: Install dependencies
-        run: poetry install --no-interaction
-
-      - name: Check formatting with black
-        run: poetry run black --check fastapi_notification
-
-      - name: Check import order with isort
-        run: poetry run isort --check-only fastapi_notification
-
-      - name: Run pylint
-        run: poetry run pylint fastapi_notification --rcfile=pyproject.toml
-
-      - name: Run mypy
-        run: poetry run mypy fastapi_notification
-
-      - name: Run bandit
-        run: poetry run bandit -c pyproject.toml -r fastapi_notification
+          python-version: "3.15"
+      - run: python -m pip install poetry==2.5.1
+      - run: poetry check --lock
+      - run: poetry sync --with dev --no-interaction
+      - run: poetry run black --check fastapi_notification
+      - run: poetry run isort --check-only fastapi_notification
+      - run: poetry run docformatter --check --recursive --wrap-summaries 88 --wrap-descriptions 88 fastapi_notification
+      - run: poetry run pylint fastapi_notification --rcfile=pyproject.toml
+      - run: poetry run mypy fastapi_notification
+      - run: poetry run bandit -c pyproject.toml -r fastapi_notification
+      - run: poetry run pip check
+  databases:
+    name: Real PostgreSQL 17.5 and MySQL 8.4
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.5
+        env:
+          POSTGRES_USER: notification
+          POSTGRES_PASSWORD: notification
+          POSTGRES_DB: notification_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U notification -d notification_test"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: notification_test
+          MYSQL_USER: notification
+          MYSQL_PASSWORD: notification
+          MYSQL_ROOT_PASSWORD: isolated-test-root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -unotification -pnotification"
+          --health-interval=10s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+      - run: python -m pip install poetry==2.5.1
+      - run: poetry check --lock
+      - run: poetry sync --with dev,database --no-interaction
+      - name: PostgreSQL runtime and independent sessions
+        run: poetry run pytest fastapi_notification/tests --database-url postgresql+asyncpg://notification:notification@127.0.0.1:5432/notification_test --no-cov --junitxml=postgresql.xml
+      - name: MySQL runtime, REPEATABLE READ races and reference migration
+        run: poetry run pytest fastapi_notification/tests --database-url mysql+aiomysql://notification:notification@127.0.0.1:3306/notification_test --no-cov --junitxml=mysql.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: databases
+          path: |
+            postgresql.xml
+            mysql.xml
+  distribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+      - run: python -m pip install poetry==2.5.1
+      - run: poetry check --lock
+      - run: poetry build
+      - name: Clean wheel installation and FastAPI persistence smoke test
+        run: |
+          python -m venv "$RUNNER_TEMP/clean-wheel"
+          "$RUNNER_TEMP/clean-wheel/bin/python" -m pip install dist/*.whl aiosqlite
+          "$RUNNER_TEMP/clean-wheel/bin/python" -m pip check
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/clean-wheel/bin/python" -I "$GITHUB_WORKSPACE/scripts/wheel_smoke.py"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/*
