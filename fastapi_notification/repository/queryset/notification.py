@@ -178,7 +178,7 @@ class NotificationQuerySet:
         for condition in conditions or []:
             statement = statement.where(condition)
 
-        return statement.order_by(Notification.timestamp.desc())
+        return statement.order_by(Notification.timestamp.desc(), Notification.id.desc())
 
     def all_notifications(
         self,
@@ -411,29 +411,27 @@ class NotificationQuerySet:
             Select: Grouped counts by category, priority and read state. The DAL
             folds these rows into total/unread/read and dimension breakdowns.
         """
-        visible_ids = (
+        visible = (
             statement.with_only_columns(
                 Notification.id,
                 Notification.category,
                 Notification.priority,
+                self.seen_condition(user).label("is_seen"),
             )
             .order_by(None)
             .subquery()
         )
-        seen_ids = select(NotificationSeen.notification_id).where(
-            NotificationSeen.user_id == get_identity_adapter().get_user_id(user)
-        )
-        is_seen = visible_ids.c.id.in_(seen_ids)
-
+        # Group simple projected columns: MySQL ONLY_FULL_GROUP_BY does not
+        # equate repeated IN-subqueries in SELECT and GROUP BY expressions.
         return (
             select(
-                visible_ids.c.category,
-                visible_ids.c.priority,
-                is_seen.label("is_seen"),
-                func.count(visible_ids.c.id).label("count"),
+                visible.c.category,
+                visible.c.priority,
+                visible.c.is_seen,
+                func.count(visible.c.id).label("count"),
             )
-            .select_from(visible_ids)
-            .group_by(visible_ids.c.category, visible_ids.c.priority, is_seen)
+            .select_from(visible)
+            .group_by(visible.c.category, visible.c.priority, visible.c.is_seen)
         )
 
     def preview_statement(self, statement: Select, user: Any, limit: int) -> Select:

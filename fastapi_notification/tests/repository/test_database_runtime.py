@@ -284,3 +284,34 @@ async def test_utc_and_local_time_microseconds_round_trip(
     assert notification.expires_at == instant
     assert quiet.start_time == time(22, 0, 0, 123456)
     assert quiet.end_time == time(7, 0, 0, 654321)
+
+
+async def test_timestamp_ties_and_grouped_read_state_are_portable(
+    session: AsyncSession, dal: NotificationDataAccessLayer, user: User
+) -> None:
+    """Equal timestamps have stable order and strict SQL grouping preserves state."""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import update
+
+    from fastapi_notification.models.notification import Notification
+
+    first = await dal.create_notification(
+        verb="read", actor=user, recipients=user, is_sent=True
+    )
+    second = await dal.create_notification(
+        verb="unread", actor=user, recipients=user, is_sent=True
+    )
+    await session.execute(
+        update(Notification).values(timestamp=datetime(2030, 1, 2, tzinfo=timezone.utc))
+    )
+    await first.mark_as_seen(session, user)
+    await session.commit()
+    assert [row.id for row in await dal.sent(recipients=user, display_detail=True)] == [
+        second.id,
+        first.id,
+    ]
+    summary = await dal.summary(
+        dal.sent_statement(recipients=user, exclude_deleted_by=user), user
+    )
+    assert (summary["total"], summary["read"], summary["unread"]) == (2, 1, 1)
