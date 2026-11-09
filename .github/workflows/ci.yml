@@ -36,7 +36,7 @@ jobs:
           poetry run pip install fastapi==0.110.0 'sqlalchemy[asyncio]==2.0.30' pydantic==2.7.0 pydantic-settings==2.3.0
           poetry run pip check
           poetry run pytest fastapi_notification/tests --cov-report=term-missing --cov-report=json:minimum-coverage.json --junitxml=minimum-tests.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: python-${{ matrix.python }}
@@ -99,7 +99,7 @@ jobs:
         run: poetry run pytest fastapi_notification/tests --database-url postgresql+asyncpg://notification:notification@127.0.0.1:5432/notification_test --no-cov --junitxml=postgresql.xml
       - name: MySQL runtime and REPEATABLE READ races
         run: poetry run pytest fastapi_notification/tests --database-url mysql+aiomysql://notification:notification@127.0.0.1:3306/notification_test --no-cov --junitxml=mysql.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: databases
@@ -126,7 +126,7 @@ jobs:
           "$RUNNER_TEMP/clean-wheel/bin/python" -m pip check
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/clean-wheel/bin/python" -I "$GITHUB_WORKSPACE/scripts/wheel_smoke.py"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: distributions
           path: dist/*
